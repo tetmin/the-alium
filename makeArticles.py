@@ -1,6 +1,12 @@
 import requests
 import openai
 import re
+import os
+
+# Get the value of the API key from the environment variable
+gnews_api_key = os.environ.get('GNEWS_API_KEY')
+openai_api_key = os.environ.get('OPENAI_API_KEY')
+
 
 def get_news_articles(api_key, query, n_articles):
     url = f"https://gnews.io/api/v4/search?q={query}&max={n_articles}&token={api_key}"
@@ -20,16 +26,12 @@ def get_news_articles(api_key, query, n_articles):
 
     return titles
 
-# Set your GNews API key
-gnews_api_key = "7f087357cb888449678cb5ab68d14bb9"
-
 # Specify the query term for articles (e.g., "artificial intelligence")
 query = "artificial intelligence"
 
 # Call the function to fetch news articles
 titles = get_news_articles(gnews_api_key, query, 3)
 
-openai_api_key = "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"
 
 # Set up your OpenAI API credentials
 openai.api_key = openai_api_key
