@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "daily-mash"
+version = "0.1.0"
+description = "Generate satirical AI news with AI"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+packages = [{include = "daily_mash"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+openai = "^0.27.7"
+requests = "^2.31.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
