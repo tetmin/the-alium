@@ -3,10 +3,50 @@ import requests
 import openai
 import os
 import re
+import base64
+import json
 
 # Setup the Modal Labs image
 image = modal.Image.debian_slim().poetry_install_from_file("pyproject.toml")
 stub = modal.Stub(name="dAIly-mash", image=image)
+
+
+import requests
+import base64
+import json
+
+@stub.function(secret=modal.Secret.from_name("toms-github-secret"))
+def commit_new_blog_post(filename, content):
+    # GitHub repository details
+    owner = "tetmin"
+    repo = "dAIly-mash"
+    path = f"_posts/{filename}.md"
+    token = os.environ["GITHUB_TOKEN"]
+
+    # GitHub API URL for this repository
+    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+
+    # Your GitHub Personal Access Token
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+
+    # Prepare the data for the API request
+    data = {
+        "message": "Create a new post",
+        "content": base64.b64encode(content.encode()).decode(),  # GitHub API requires the file content to be base64 encoded
+        "branch": "main"
+    }
+
+    # Make the API request
+    response = requests.put(url, headers=headers, data=json.dumps(data))
+
+    # Check the response
+    if response.status_code == 201:
+        print("New blog post created successfully.")
+    else:
+        print("Failed to create new blog post. Response:", response.content)
 
 
 # Get some topical news article headlines
@@ -86,7 +126,7 @@ query = "artificial intelligence"
 def main():
     posts = generate_posts.call(query, 1)
 
-    # write each post to a file
+    # write each post to a file for local testing
     for filename, content in posts:
         with open(f"_posts/{filename}.md", "w") as f:
             f.write(content)
@@ -95,3 +135,7 @@ def main():
 @stub.function(schedule=modal.Period(hours=5))
 def scheduled():
     posts = generate_posts.call(query, 1)
+
+    # commit each post to GitHub
+    for filename, content in posts:
+        commit_new_blog_post.call(filename, content)
