@@ -11,10 +11,6 @@ image = modal.Image.debian_slim().poetry_install_from_file("pyproject.toml")
 stub = modal.Stub(name="dAIly-mash", image=image)
 
 
-import requests
-import base64
-import json
-
 @stub.function(secret=modal.Secret.from_name("toms-github-secret"))
 def commit_new_blog_post(filename, content):
     # GitHub repository details
@@ -29,14 +25,16 @@ def commit_new_blog_post(filename, content):
     # Your GitHub Personal Access Token
     headers = {
         "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json"
+        "Accept": "application/vnd.github.v3+json",
     }
 
     # Prepare the data for the API request
     data = {
         "message": "Create a new post",
-        "content": base64.b64encode(content.encode()).decode(),  # GitHub API requires the file content to be base64 encoded
-        "branch": "main"
+        "content": base64.b64encode(
+            content.encode()
+        ).decode(),  # GitHub API requires the file content to be base64 encoded
+        "branch": "main",
     }
 
     # Make the API request
