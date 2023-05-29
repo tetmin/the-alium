@@ -79,5 +79,4 @@ prompt = f"Write a parody of this news headline in the style of The Daily Mash, 
 
 @stub.local_entrypoint()
 def main():
-    print('hellp world')
     generate_posts.call(query, prompt, 1)
