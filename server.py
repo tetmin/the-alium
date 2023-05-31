@@ -44,12 +44,6 @@ def commit_new_blog_post(filename, content):
     # Make the API request
     response = requests.put(url, headers=headers, data=json.dumps(data))
 
-    # Check the response
-    if response.status_code == 201:
-        print("New blog post created successfully.")
-    else:
-        print("Failed to create new blog post. Response:", response.content)
-
 
 # Get some topical news article headlines
 def get_news_articles(api_key, query, n_articles):
@@ -98,7 +92,7 @@ def get_date_for_filename():
 # Clean up a filename for Jekyll
 def clean_filename(filename):
     # Remove illegal characters
-    cleaned = re.sub(r'[\\/:"*?<>|]', "", filename)
+    cleaned = re.sub(r'[\\/:"\'\’\‘*?<>|]', "", filename)
 
     # Replace spaces with underscores
     cleaned = cleaned.replace(" ", "_")
@@ -121,14 +115,18 @@ class Story:
         self.image_url = ""
 
     def display(self):
-        print(f"original title: '{self.original_title}'")
-        print(f"ChatGPT version:\n")
+        print(f"original title: {self.original_title}")
+        print(f"ChatGPT version:")
         print(self.title)
         print(self.content)
+        print(f"image prompt: {self.image_prompt}")
         print("------------")
 
     def jekyll_file_content(self):
-        return f'---\ntitle:  "{self.title}"\ndate:   {get_datetime_for_frontmatter()}\n---\n![Alt Text]({self.image_url} "{self.image_prompt}")\n{self.content}\n\n'
+        return (
+            f"---\ntitle: {self.title}\ndate: {get_datetime_for_frontmatter()}\nimage: {self.image_url}\n---\n"
+            f'![Alt Text]({self.image_url} "{self.image_prompt}")\n\n{self.content}'
+        )
 
     def jekyll_file_name(self):
         return (
@@ -145,7 +143,9 @@ class Story:
     # Generate Jekyll post URL from Markdown filename
     def get_jekyll_post_url(self):
         # Extract the date and name from the filename
-        match = re.match(r"(\d{4})-(\d{2})-(\d{2})-(.*)\.MARKDOWN", self.jekyll_file_name())
+        match = re.match(
+            r"(\d{4})-(\d{2})-(\d{2})-(.*)\.MARKDOWN", self.jekyll_file_name()
+        )
         if not match:
             raise ValueError(f"Invalid filename: {self.jekyll_file_name()}")
         year = match.group(1)
@@ -224,7 +224,7 @@ def generate_posts(query, n_articles):
     for article in articles:
         title = article.get("title")
         if b_new_story(title):
-            new_story = get_completion(stick_title_in_prompt(title))
+            new_story = get_completion(prompt + title)
             new_title, content = split_string(new_story)
             stories.append(Story(title, new_title, content))
             stories[-1].display()
@@ -232,8 +232,7 @@ def generate_posts(query, n_articles):
     # Get ChatGPT to generate a prompt for Dall-E to generate an image for each story
     for story in stories:
         story.image_prompt = get_completion(
-            f"""Briefly describe an image which go along with the below headline in a satirical news article. The image should be funny or ironic. 
-            Use no more than 50 words. Don't try to include signs, text or logos in the image:\n\n"{story.title}"""
+            f"""In no more than 50 words, describe what an image to go along with the below news headline would look like. The image description should be funny or ironic. Don't use any words which might imply logos, symbols or any other forms of text in the image description:\n\n"{story.title}"""
         )
         response = openai.Image.create(prompt=story.image_prompt, n=1, size="512x512")
         story.image_url = response["data"][0]["url"]
@@ -246,33 +245,25 @@ def generate_posts(query, n_articles):
 # Specify the query filter for articles (e.g., "artificial intelligence")
 query = "artificial intelligence"
 
+prompt = f"""You are a staff writer at The Daily Mash. Write a parody of the provided original news headline in the style of The Daily Mash. Ensure any proper names changed to humorous ones as the Daily Mash usually does. Make the article no more than 200 words long. Include Markdown formatting for Jekyll. Below are some examples of Daily Mash style articles to give you an idea of the style.\n
+Article Example:
+# Man who can’t spell basic words demands you take his opinions seriously
+Roy Hobbs thinks he is a serious commentator on issues of the day, despite using horrible misspellings like ‘probebly’, ‘interlectuals’ and ‘definately’.\n
+Friend Emma Bradford said: “Roy hasn’t grasped that if he thinks ‘restoraunt’ is spelt like that people might realise he’s not an expert on politics, economics or any other subject.\n
+“He’s constantly writing ‘looser’ when he means ‘loser’ and ‘lightening’ when he means ‘lightning’. When it comes to ‘there’, ‘their’ and ‘they’re’ I think he just picks one at random.\n
+“He’s always spouting pompous reactionary crap, so a typical post will be, ‘In my estimatoin, a bridge with France would be disasterous. We do not want closure intergration with the Continant.’\n
+Hobbs said: “Criticising someone’s spelling is a pathetic attempt to undermine valid arguments such as my view that we should ban transsexuals from TV to stop children thinking it’s ‘cool’.”\n
 
-# Specify the prompt for generating the satirical article
-def stick_title_in_prompt(title):
-    return f"""You are a staff writer at The Daily Mash. Write a parody of the provided original news headline in the style of The Daily Mash. 
-    Ensure any proper names changed to humorous ones as the Daily Mash usually does. Make the article no more than 200 words long. 
-    Include Markdown formatting for Jekyll. Below are some examples of Daily Mash style articles to give you an idea of the style.\n\n
+Article Example:
+# Human beats highly advanced computer at drinking
+In a move designed to test the limits of technology, 30-year-old roofer Wayne Hayes took on Google’s DeepMind machine in a pint-for-pint battle.\n
+A Google spokesman said: “Having recently beaten the human champion at the board game Go, we were eager to test DeepMind at something that Westerners can understand and respect.”\n
+The AI machine was fitted with a specially-adapted USB cable with a pint glass on one end into which beer could be poured. However it broke after two pints, exploding in a shower of sparks as Stella Artois flooded its motherboard.\n
+Hayes said: “I was confident from the start because that computer just didn’t have the red, bulky look of a drinker about it.\n
+“They can build these machines that can do all sums and everything, but they’ll never take over from man if they can’t handle 15-16 pints of export lager.”\n
+However the Google spokesman added: “We should have added a ‘piss port’ to allow DeepMind to expel fluids. Also I think a little slot that you tip pork scratchings into would help.”\n
 
-    Article Example:\n
-    # Man who can’t spell basic words demands you take his opinions seriously\n
-    Roy Hobbs thinks he is a serious commentator on issues of the day, despite using horrible misspellings like ‘probebly’, ‘interlectuals’ and ‘definately’.\n\n
-    Friend Emma Bradford said: “Roy hasn’t grasped that if he thinks ‘restoraunt’ is spelt like that people might realise he’s not an expert on politics, economics or any other subject.\n\n
-    “He’s constantly writing ‘looser’ when he means ‘loser’ and ‘lightening’ when he means ‘lightning’. When it comes to ‘there’, ‘their’ and ‘they’re’ I think he just picks one at random.\n\n
-    “He’s always spouting pompous reactionary crap, so a typical post will be, ‘In my estimatoin, a bridge with France would be disasterous. We do not want closure intergration with the Continant.’\n\n
-    Hobbs said: “Criticising someone’s spelling is a pathetic attempt to undermine valid arguments such as my view that we should ban transsexuals from TV to stop children thinking it’s ‘cool’.”\n\n
-
-    Article Example:\n
-    # Human beats highly advanced computer at drinking\n
-    In a move designed to test the limits of technology, 30-year-old roofer Wayne Hayes took on Google’s DeepMind machine in a pint-for-pint battle.\n\n
-    A Google spokesman said: “Having recently beaten the human champion at the board game Go, we were eager to test DeepMind at something that Westerners can understand and respect.”\n\n
-    The AI machine was fitted with a specially-adapted USB cable with a pint glass on one end into which beer could be poured. 
-    However it broke after two pints, exploding in a shower of sparks as Stella Artois flooded its motherboard.\n\n
-    Hayes said: “I was confident from the start because that computer just didn’t have the red, bulky look of a drinker about it.\n\n
-    “They can build these machines that can do all sums and everything, but they’ll never take over from man if they can’t handle 15-16 pints of export lager.”\n\n
-    However the Google spokesman added: “We should have added a ‘piss port’ to allow DeepMind to expel fluids. Also I think a little slot that you tip pork scratchings into would help.”\n\n
-
-    Original  News Headline: {title}
-    """
+Original  News Headline: """
 
 
 @stub.function(secret=modal.Secret.from_name("twitter-secrets"))
@@ -287,7 +278,6 @@ def tweet_article(story):
     response = client.create_tweet(
         text=f"{story.title}\n\n{story.get_jekyll_post_url()}?nolongurl"
     )
-    print(f"https://twitter.com/user/status/{response.data['id']}")
 
 
 @stub.local_entrypoint()
@@ -297,10 +287,10 @@ def main():
     # Write the stories to disk
     for story in stories:
         story.write_jekyll_file("_posts")
-        tweet_article.call(story)
 
 
-@stub.function(schedule=modal.Period(hours=5))
+# schedule=modal.Period(hours=5)
+@stub.function()
 def scheduled():
     stories = generate_posts.call(query, 1)
 
