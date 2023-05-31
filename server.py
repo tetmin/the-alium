@@ -8,6 +8,7 @@ import pytz
 import base64
 import json
 import cloudinary.uploader
+import tweepy
 
 # Setup the Modal Labs image
 image = modal.Image.debian_slim().poetry_install_from_file("pyproject.toml")
@@ -19,7 +20,7 @@ def commit_new_blog_post(filename, content):
     # GitHub repository details
     owner = "tetmin"
     repo = "dAIly-mash"
-    path = f"_posts/{filename}.md"
+    path = f"_posts/{filename}"
     token = os.environ["GITHUB_TOKEN"]
 
     # GitHub API URL for this repository
@@ -130,7 +131,9 @@ class Story:
         return f'---\ntitle:  "{self.title}"\ndate:   {get_datetime_for_frontmatter()}\n---\n![Alt Text]({self.image_url} "{self.image_prompt}")\n{self.content}\n\n'
 
     def jekyll_file_name(self):
-        return f"{get_date_for_filename()}-{clean_filename(self.original_title)}.MARKDOWN"
+        return (
+            f"{get_date_for_filename()}-{clean_filename(self.original_title)}.MARKDOWN"
+        )
 
     def write_jekyll_file(self, path=""):
         if path:
@@ -138,6 +141,21 @@ class Story:
         file_name = f"{path}{self.jekyll_file_name()}"
         with open(file_name, "w") as f:
             f.write(self.jekyll_file_content())
+
+    # Generate Jekyll post URL from Markdown filename
+    def get_jekyll_post_url(self):
+        # Extract the date and name from the filename
+        match = re.match(r"(\d{4})-(\d{2})-(\d{2})-(.*)\.MARKDOWN", self.jekyll_file_name())
+        if not match:
+            raise ValueError(f"Invalid filename: {self.jekyll_file_name()}")
+        year = match.group(1)
+        month = match.group(2)
+        day = match.group(3)
+        title = match.group(4)
+        URL = f"https://tetmin.github.io/dAIly-mash/{year}/{month}/{day}/{title}.html"
+        print(URL)
+
+        return URL
 
 
 def get_completion(prompt, model="gpt-3.5-turbo"):
@@ -157,33 +175,38 @@ def split_string(string):
 
     return re.sub(r"^#+\s*|\*\*|\*\s*", "", title), content
 
+
 def get_existing_titles():
     # Send the GET request
-    response = requests.get("https://api.github.com/repos/tetmin/dAIly-mash/contents/_posts")
+    response = requests.get(
+        "https://api.github.com/repos/tetmin/dAIly-mash/contents/_posts"
+    )
 
     names = []
     # If the request was successful, the status code will be 200
     if response.status_code == 200:
         # Load the JSON data from the response
         data = json.loads(response.text)
-        
+
         # Print the name of each file in the directory
         for file in data:
             names.append(file["name"][11:-9])
             print(names[-1])
-            
+
     else:
         print(f"Request failed with status code {response.status_code}")
 
     return names
 
+
 def b_new_story(title):
-    """ Check to make sure we haven't done this story already. """
+    """Check to make sure we haven't done this story already."""
     # Get index of story titles already in repo
     existing_titles = get_existing_titles()
-    
+
     # return match result
     return clean_filename(title) not in existing_titles
+
 
 @stub.function(
     secrets=[
@@ -252,6 +275,21 @@ def stick_title_in_prompt(title):
     """
 
 
+@stub.function(secret=modal.Secret.from_name("twitter-secrets"))
+def tweet_article(story):
+    client = tweepy.Client(
+        consumer_key=os.environ["consumer_key"],
+        consumer_secret=os.environ["consumer_secret"],
+        access_token=os.environ["access_token"],
+        access_token_secret=os.environ["access_token_secret"],
+    )
+
+    response = client.create_tweet(
+        text=f"{story.title}\n\n{story.get_jekyll_post_url()}?nolongurl"
+    )
+    print(f"https://twitter.com/user/status/{response.data['id']}")
+
+
 @stub.local_entrypoint()
 def main():
     stories = generate_posts.call(query, 1)
@@ -259,6 +297,7 @@ def main():
     # Write the stories to disk
     for story in stories:
         story.write_jekyll_file("_posts")
+        tweet_article.call(story)
 
 
 @stub.function(schedule=modal.Period(hours=5))
@@ -268,3 +307,4 @@ def scheduled():
     # commit each post to GitHub
     for story in stories:
         commit_new_blog_post.call(story.jekyll_file_name(), story.jekyll_file_content())
+        tweet_article.call(story)
