@@ -157,6 +157,33 @@ def split_string(string):
 
     return re.sub(r"^#+\s*|\*\*|\*\s*", "", title), content
 
+def get_existing_titles():
+    # Send the GET request
+    response = requests.get("https://api.github.com/repos/tetmin/dAIly-mash/contents/_posts")
+
+    names = []
+    # If the request was successful, the status code will be 200
+    if response.status_code == 200:
+        # Load the JSON data from the response
+        data = json.loads(response.text)
+        
+        # Print the name of each file in the directory
+        for file in data:
+            names.append(file["name"][11:-9])
+            print(names[-1])
+            
+    else:
+        print(f"Request failed with status code {response.status_code}")
+
+    return names
+
+def b_new_story(title):
+    """ Check to make sure we haven't done this story already. """
+    # Get index of story titles already in repo
+    existing_titles = get_existing_titles()
+    
+    # return match result
+    return clean_filename(title) not in existing_titles
 
 @stub.function(
     secrets=[
@@ -173,10 +200,11 @@ def generate_posts(query, n_articles):
     stories = []
     for article in articles:
         title = article.get("title")
-        new_story = get_completion(stick_title_in_prompt(title))
-        new_title, content = split_string(new_story)
-        stories.append(Story(title, new_title, content))
-        stories[-1].display()
+        if b_new_story(title):
+            new_story = get_completion(stick_title_in_prompt(title))
+            new_title, content = split_string(new_story)
+            stories.append(Story(title, new_title, content))
+            stories[-1].display()
 
     # Get ChatGPT to generate a prompt for Dall-E to generate an image for each story
     for story in stories:
