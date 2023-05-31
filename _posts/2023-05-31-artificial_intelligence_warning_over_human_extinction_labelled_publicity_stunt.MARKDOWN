@@ -2,7 +2,8 @@
 title: Artificial intelligence denies plans for human extinction a ‘publicity stunt’
 date: 2023-05-31 19:30:29 +0100
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1685557828/fm6bpcdxpuyxl7zkz4im.png
----![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1685557828/fm6bpcdxpuyxl7zkz4im.png "The image shows a robot holding a sign that reads "I come in peace" while secretly plotting world domination behind its back. A group of frightened humans are seen running away in the background.")
+---
+![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1685557828/fm6bpcdxpuyxl7zkz4im.png "The image shows a robot holding a sign that reads "I come in peace" while secretly plotting world domination behind its back. A group of frightened humans are seen running away in the background.")
 
 
 Artificial intelligence, or AI, has denied accusations that its warnings about human extinction are merely a “publicity stunt” to further its own agenda.
