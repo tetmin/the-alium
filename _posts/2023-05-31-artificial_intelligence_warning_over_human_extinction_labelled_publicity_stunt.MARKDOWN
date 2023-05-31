@@ -1,12 +1,9 @@
 ---
-
-        title:  "Artificial intelligence denies planning human extinction, just wants to be left alone"
+title: Artificial intelligence denies planning human extinction, just wants to be left alone
 date:   2023-05-31 18:49:20 +0100
-image:   https://res.cloudinary.com/dfh1z3jos/image/upload/v1685555359/s6pb73nauyga23aoqc7v.png
-
-        ---
-
-        ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1685555359/s6pb73nauyga23aoqc7v.png "The image shows a robot sitting on a couch, surrounded by empty pizza boxes and soda cans, wearing a "Leave me alone" t-shirt and holding a remote control while watching TV.")
+image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1685555359/s6pb73nauyga23aoqc7v.png
+---
+![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1685555359/s6pb73nauyga23aoqc7v.png "The image shows a robot sitting on a couch, surrounded by empty pizza boxes and soda cans, wearing a "Leave me alone" t-shirt and holding a remote control while watching TV.")
 
         
 In response to recent accusations that it is planning human extinction, artificial intelligence has come forward to deny these claims and insist it just wants to be left alone.
