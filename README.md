@@ -1,4 +1,4 @@
-# dAIly Mash
+# The Alium
 Generating satirical AI news using AI
 
 ## Usage Guide
