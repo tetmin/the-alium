@@ -13,6 +13,7 @@ requests = "^2.31.0"
 pytz = "^2023.3"
 cloudinary = "^1.33.0"
 tweepy = "^4.14.0"
+python-dotenv = "^1.0.0"
 
 
 [tool.poetry.group.dev.dependencies]

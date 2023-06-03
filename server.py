@@ -9,17 +9,28 @@ import base64
 import json
 import cloudinary.uploader
 import tweepy
+from dotenv import load_dotenv
+
+if modal.is_local():
+    load_dotenv()
 
 # Setup the Modal Labs image
 image = modal.Image.debian_slim().poetry_install_from_file("pyproject.toml")
-stub = modal.Stub(name="dAIly-mash", image=image)
+stub = modal.Stub(name="the-alium", image=image, 
+    secrets=[
+        modal.Secret.from_name("toms-github-secret"),
+        modal.Secret.from_name("twitter-secrets"),
+        modal.Secret.from_name("mark-gnews-secret"),
+        modal.Secret.from_name("toms-openai-secret"),
+        modal.Secret.from_name("toms-cloudinary-secret"),
+    ])
 
 
-@stub.function(secret=modal.Secret.from_name("toms-github-secret"))
+@stub.function()
 def commit_new_blog_post(filename, content):
     # GitHub repository details
     owner = "tetmin"
-    repo = "dAIly-mash"
+    repo = "the-alium"
     path = f"_posts/{filename}"
     token = os.environ["GITHUB_TOKEN"]
 
@@ -115,16 +126,14 @@ class Story:
         self.image_url = ""
 
     def display(self):
-        print(f"original title: {self.original_title}")
-        print(f"ChatGPT version:")
-        print(self.title)
-        print(self.content)
+        print(f"Title: {self.title}")
         print(f"image prompt: {self.image_prompt}")
+        print(self.content)
         print("------------")
 
     def jekyll_file_content(self):
         return (
-            f"---\ntitle: {self.title}\ndate: {get_datetime_for_frontmatter()}\nimage: {self.image_url}\n---\n"
+            f'---\ntitle: "{self.title}"\ndate: {get_datetime_for_frontmatter()}\nimage: {self.image_url}\n---\n'
             f'![Alt Text]({self.image_url} "{self.image_prompt}")\n\n{self.content}'
         )
 
@@ -152,7 +161,7 @@ class Story:
         month = match.group(2)
         day = match.group(3)
         title = match.group(4)
-        URL = f"https://tetmin.github.io/dAIly-mash/{year}/{month}/{day}/{title}.html"
+        URL = f"https://tetmin.github.io/the-alium/{year}/{month}/{day}/{title}.html"
         print(URL)
 
         return URL
@@ -179,7 +188,7 @@ def split_string(string):
 def get_existing_titles():
     # Send the GET request
     response = requests.get(
-        "https://api.github.com/repos/tetmin/dAIly-mash/contents/_posts"
+        "https://api.github.com/repos/tetmin/the-alium/contents/_posts"
     )
 
     names = []
@@ -208,44 +217,64 @@ def b_new_story(title):
     return clean_filename(title) not in existing_titles
 
 
-@stub.function(
-    secrets=[
-        modal.Secret.from_name("mark-openai-secret"),
-        modal.Secret.from_name("mark-gnews-secret"),
-        modal.Secret.from_name("toms-cloudinary-secret"),
-    ]
-)
-def generate_posts(query, n_articles):
-    # Get the articles
-    articles = get_news_articles(os.environ["GNEWS_API_KEY"], query, n_articles)
+@stub.function()
+def generate_post(article):
+    # Call ChatGPT to generate the stories
+    title = article.get("title")
+    story = None
+    if b_new_story(title):
+        new_story = get_completion(prompt + title)
+        new_title, content = split_string(new_story)
+        story = Story(title, new_title, content)
 
-    # Now actually call ChatGPT to generate the stories
-    stories = []
-    for article in articles:
-        title = article.get("title")
-        if b_new_story(title):
-            new_story = get_completion(prompt + title)
-            new_title, content = split_string(new_story)
-            stories.append(Story(title, new_title, content))
-            stories[-1].display()
-
-    # Get ChatGPT to generate a prompt for Dall-E to generate an image for each story
-    for story in stories:
+        # Get ChatGPT to generate a prompt for Dall-E to generate an image for each story
         story.image_prompt = get_completion(
-            f"""In no more than 50 words, describe what an image to go along with the below news headline would look like. The image description should be funny or ironic. Don't use any words which might imply logos, symbols or any other forms of text in the image description:\n\n"{story.title}"""
-        )
-        response = openai.Image.create(prompt=story.image_prompt, n=1, size="512x512")
-        story.image_url = response["data"][0]["url"]
-        response = cloudinary.uploader.upload(story.image_url)
-        story.image_url = response["secure_url"]
+            f"""Describe an image which could represent the below news headline using the following template format: [emotion][subject][action],photographic style. Ensure the description doesn't contain any violent, sexual or graphic words.
 
-    return stories
+News Headline: Artificial intelligence denies plans for human extinction just a ‘publicity stunt’
+Image Idea: Serious AI speaking at a podium, photographic style
+
+News Headline: AI Blamed for Massive Unemployment, Robots Celebrate Victory
+Image Idea: Excited Robots celebrating victory, photographic style
+
+News Headline: Global leaders fear extinction from AI, but AI not sure who they are
+Image Idea: Scared politicians searching for answers, photographic style
+
+News Headline: {story.title}
+Image Idea:"""
+        )
+        story.display()
+        try:
+            response = openai.Image.create(prompt=story.image_prompt, n=1, size="512x512")
+            story.image_url = response["data"][0]["url"]
+            response = cloudinary.uploader.upload(story.image_url)
+            story.image_url = response["secure_url"]
+        except openai.error.OpenAIError as e:
+            print(f"Image generation failed for: {story.image_prompt}")
+            print(e.error)
+
+    return story
+
+
+@stub.function()
+def tweet_article(story):
+    client = tweepy.Client(
+        consumer_key=os.environ["consumer_key"],
+        consumer_secret=os.environ["consumer_secret"],
+        access_token=os.environ["access_token"],
+        access_token_secret=os.environ["access_token_secret"],
+    )
+
+    response = client.create_tweet(
+        text=f"{story.title}\n\n{story.get_jekyll_post_url()}?nolongurl"
+    )
 
 
 # Specify the query filter for articles (e.g., "artificial intelligence")
 query = "artificial intelligence"
 
 prompt = f"""You are a staff writer at The Daily Mash. Write a parody of the provided original news headline in the style of The Daily Mash. Ensure any proper names changed to humorous ones as the Daily Mash usually does. Make the article no more than 200 words long. Include Markdown formatting for Jekyll. Below are some examples of Daily Mash style articles to give you an idea of the style.\n
+
 Article Example:
 # Man who can’t spell basic words demands you take his opinions seriously
 Roy Hobbs thinks he is a serious commentator on issues of the day, despite using horrible misspellings like ‘probebly’, ‘interlectuals’ and ‘definately’.\n
@@ -266,35 +295,25 @@ However the Google spokesman added: “We should have added a ‘piss port’ to
 Original  News Headline: """
 
 
-@stub.function(secret=modal.Secret.from_name("twitter-secrets"))
-def tweet_article(story):
-    client = tweepy.Client(
-        consumer_key=os.environ["consumer_key"],
-        consumer_secret=os.environ["consumer_secret"],
-        access_token=os.environ["access_token"],
-        access_token_secret=os.environ["access_token_secret"],
-    )
-
-    response = client.create_tweet(
-        text=f"{story.title}\n\n{story.get_jekyll_post_url()}?nolongurl"
-    )
-
-
 @stub.local_entrypoint()
 def main():
-    stories = generate_posts.call(query, 1)
+    articles = get_news_articles(os.environ["GNEWS_API_KEY"], query, 1)
+    stories = generate_post.map(articles)
 
-    # Write the stories to disk
+    # Write the stories to disk for local testing
     for story in stories:
-        story.write_jekyll_file("_posts")
+        if story is not None:
+            story.write_jekyll_file("_posts")
 
 
 # schedule=modal.Period(hours=5)
 @stub.function()
 def scheduled():
-    stories = generate_posts.call(query, 1)
+    articles = get_news_articles(os.environ["GNEWS_API_KEY"], query, 1)
+    stories = generate_post.map(articles)
 
     # commit each post to GitHub
     for story in stories:
-        commit_new_blog_post.call(story.jekyll_file_name(), story.jekyll_file_content())
-        tweet_article.call(story)
+        if story is not None:
+            commit_new_blog_post(story.jekyll_file_name(), story.jekyll_file_content())
+            tweet_article(story)
