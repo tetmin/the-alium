@@ -10,20 +10,25 @@ import json
 import cloudinary.uploader
 import tweepy
 from dotenv import load_dotenv
+import json
 
 if modal.is_local():
     load_dotenv()
 
 # Setup the Modal Labs image
 image = modal.Image.debian_slim().poetry_install_from_file("pyproject.toml")
-stub = modal.Stub(name="the-alium", image=image, 
+stub = modal.Stub(
+    name="the-alium",
+    image=image,
     secrets=[
         modal.Secret.from_name("toms-github-secret"),
         modal.Secret.from_name("twitter-secrets"),
         modal.Secret.from_name("mark-gnews-secret"),
         modal.Secret.from_name("toms-openai-secret"),
         modal.Secret.from_name("toms-cloudinary-secret"),
-    ])
+        modal.Secret.from_name("toms-respell-secret"),
+    ],
+)
 
 
 def commit_new_blog_post(filename, content):
@@ -173,9 +178,35 @@ def get_completion(prompt, model="gpt-3.5-turbo"):
     )
     return response.choices[0].message["content"]
 
+
+# Uses Respell for GPT-4 access
+def get_respell_completion(title):
+    response = requests.post(
+        "https://api.respell.ai/v1/run",
+        headers={
+            # This is your API key
+            "Authorization": "Bearer " + os.environ["RESPELL_TOKEN"],
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+        data=json.dumps(
+            {
+                "spellId": "wd8KSLZz7WVCT5dh0ysas",
+                "inputs": {
+                    "title": title,
+                    "dummy": "",
+                },
+            }
+        ),
+    )
+
+    return response.json().get("outputs")
+
+
 def get_moderation_flag(prompt):
     response = openai.Moderation.create(input=prompt)
     return response.results[0].flagged
+
 
 def split_string(string):
     lines = string.split("\n", 1)  # Split the string at the first newline character
@@ -216,6 +247,27 @@ def b_new_story(title):
 
 
 @stub.function()
+def generate_post_respell(article):
+    title = article.get("title")
+    story = None
+    if b_new_story(title) and not get_moderation_flag(prompt + title):
+        try:
+            new_story = get_respell_completion(title)
+            new_title, content = split_string(new_story["story"])
+            story = Story(title, new_title, content)
+
+            story.image_prompt = new_story["image_prompt"]
+            story.image_url = new_story["image"]
+            response = cloudinary.uploader.upload(story.image_url)
+            story.image_url = response["secure_url"]
+        except:
+            print("Error generating story using Respell, switching to ChatGPT-3.5")
+            story = generate_post(article)
+
+    return story
+
+
+@stub.function()
 def generate_post(article):
     # Call ChatGPT to generate the stories
     title = article.get("title")
@@ -251,7 +303,9 @@ Image Idea:"""
 
         # now get the image itself
         try:
-            response = openai.Image.create(prompt=story.image_prompt, n=1, size="512x512")
+            response = openai.Image.create(
+                prompt=story.image_prompt, n=1, size="512x512"
+            )
             story.image_url = response["data"][0]["url"]
             response = cloudinary.uploader.upload(story.image_url)
             story.image_url = response["secure_url"]
@@ -303,7 +357,7 @@ Original  News Headline: """
 @stub.local_entrypoint()
 def main():
     articles = get_news_articles(os.environ["GNEWS_API_KEY"], query, 1)
-    stories = generate_post.map(articles)
+    stories = generate_post_respell.map(articles)
 
     # Write the stories to disk for local testing
     for story in stories:
@@ -311,11 +365,11 @@ def main():
             story.write_jekyll_file("_posts")
 
 
-# Deploy to Modal and generate 4 articles per day
-@stub.function(schedule=modal.Period(hours=6))
+# Deploy to Modal and generate 3 articles per day
+@stub.function(schedule=modal.Period(hours=8))
 def scheduled():
     articles = get_news_articles(os.environ["GNEWS_API_KEY"], query, 1)
-    stories = generate_post.map(articles)
+    stories = generate_post_respell.map(articles)
 
     # commit each post to GitHub
     for story in stories:
