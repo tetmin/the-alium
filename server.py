@@ -26,7 +26,6 @@ stub = modal.Stub(name="the-alium", image=image,
     ])
 
 
-@stub.function()
 def commit_new_blog_post(filename, content):
     # GitHub repository details
     owner = "tetmin"
@@ -203,10 +202,6 @@ def get_existing_titles():
         # Print the name of each file in the directory
         for file in data:
             names.append(file["name"][11:-9])
-            print(names[-1])
-
-    else:
-        print(f"Request failed with status code {response.status_code}")
 
     return names
 
@@ -267,7 +262,6 @@ Image Idea:"""
     return story
 
 
-@stub.function()
 def tweet_article(story):
     client = tweepy.Client(
         consumer_key=os.environ["consumer_key"],
@@ -317,8 +311,8 @@ def main():
             story.write_jekyll_file("_posts")
 
 
-# schedule=modal.Period(hours=5)
-@stub.function()
+# Deploy to Modal and generate 4 articles per day
+@stub.function(schedule=modal.Period(hours=6))
 def scheduled():
     articles = get_news_articles(os.environ["GNEWS_API_KEY"], query, 1)
     stories = generate_post.map(articles)
