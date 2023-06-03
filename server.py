@@ -174,6 +174,9 @@ def get_completion(prompt, model="gpt-3.5-turbo"):
     )
     return response.choices[0].message["content"]
 
+def get_moderation_flag(prompt):
+    response = openai.Moderation.create(input=prompt)
+    return response.results[0].flagged
 
 def split_string(string):
     lines = string.split("\n", 1)  # Split the string at the first newline character
@@ -222,7 +225,7 @@ def generate_post(article):
     # Call ChatGPT to generate the stories
     title = article.get("title")
     story = None
-    if b_new_story(title):
+    if b_new_story(title) and not get_moderation_flag(prompt + title):
         new_story = get_completion(prompt + title)
         new_title, content = split_string(new_story)
         story = Story(title, new_title, content)
@@ -243,7 +246,15 @@ Image Idea: Scared politicians searching for answers, photographic style
 News Headline: {story.title}
 Image Idea:"""
         )
+        # check the image prompt is not flagged
+        if get_moderation_flag(story.image_prompt):
+            print(f"Image prompt failed moderation: {story.image_prompt}")
+            story = None
+            return story
+
         story.display()
+
+        # now get the image itself
         try:
             response = openai.Image.create(prompt=story.image_prompt, n=1, size="512x512")
             story.image_url = response["data"][0]["url"]
