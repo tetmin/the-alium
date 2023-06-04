@@ -128,6 +128,7 @@ class Story:
         self.content = content
         self.image_prompt = ""
         self.image_url = ""
+        self.llm = ""
 
     def display(self):
         print(f"Title: {self.title}")
@@ -137,7 +138,7 @@ class Story:
 
     def jekyll_file_content(self):
         return (
-            f'---\ntitle: "{self.title}"\ndate: {get_datetime_for_frontmatter()}\nimage: {self.image_url}\n---\n'
+            f'---\ntitle: "{self.title}"\ndate: {get_datetime_for_frontmatter()}\nimage: {self.image_url}\nllm: {self.llm}\n---\n'
             f'![Alt Text]({self.image_url} "{self.image_prompt}")\n\n{self.content}'
         )
 
@@ -165,7 +166,7 @@ class Story:
         month = match.group(2)
         day = match.group(3)
         title = match.group(4)
-        URL = f"https://tetmin.github.io/the-alium/{year}/{month}/{day}/{title}.html"
+        URL = f"https://www.thealium.com/{year}/{month}/{day}/{title}.html"
         print(URL)
 
         return URL
@@ -255,6 +256,7 @@ def generate_post_respell(article):
             new_story = get_respell_completion(title)
             new_title, content = split_string(new_story["story"])
             story = Story(title, new_title, content)
+            story.llm = "ChatGPT-4"
 
             story.image_prompt = new_story["image_prompt"]
             story.image_url = new_story["image"]
@@ -276,6 +278,7 @@ def generate_post(article):
         new_story = get_completion(prompt + title)
         new_title, content = split_string(new_story)
         story = Story(title, new_title, content)
+        story.llm = "ChatGPT-3.5"
 
         # Get ChatGPT to generate a prompt for Dall-E to generate an image for each story
         story.image_prompt = get_completion(
