@@ -369,7 +369,7 @@ def main():
 
 
 # Deploy to Modal and generate 3 articles per day
-@stub.function(schedule=modal.Period(hours=8))
+@stub.function(schedule=modal.Cron("1 6,14,22 * * *"))
 def scheduled():
     articles = get_news_articles(os.environ["GNEWS_API_KEY"], query, 1)
     stories = generate_post_respell.map(articles)
