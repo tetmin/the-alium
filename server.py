@@ -137,9 +137,11 @@ class Story:
         print("------------")
 
     def jekyll_file_content(self):
+        title_with_single_quotes = self.title.replace("\"", "'")
+        image_prompt_with_single_quotes = self.image_prompt.replace("\"", "'")
         return (
-            f'---\ntitle: "{self.title}"\ndate: {get_datetime_for_frontmatter()}\nimage: {self.image_url}\nllm: {self.llm}\n---\n'
-            f'![Alt Text]({self.image_url} "{self.image_prompt}")\n\n{self.content}'
+            f'---\ntitle: "{title_with_single_quotes}"\ndate: {get_datetime_for_frontmatter()}\nimage: {self.image_url}\nllm: {self.llm}\n---\n'
+            f'![Alt Text]({self.image_url} "{image_prompt_with_single_quotes}")\n\n{self.content}'
         )
 
     def jekyll_file_name(self):
