@@ -1,5 +1,5 @@
 ---
-title: "AI-generated Oasis Album Infuriates Former Vocalist, "Noel Smallgherita""
+title: "AI-generated Oasis Album Infuriates Former Vocalist, 'Noel Smallgherita'"
 date: 2023-06-04 15:01:58 +0100
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1685887317/skrul0fp1fn1hqftpurb.png
 llm: ChatGPT-4
