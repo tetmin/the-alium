@@ -138,7 +138,7 @@ class Story:
 
     def jekyll_file_content(self):
         return (
-            f'---\ntitle: "{self.title}"\ndate: {get_datetime_for_frontmatter()}\nimage: {self.image_url}\nllm: {self.llm}\n---\n'
+            f'---\ntitle: >\n   {self.title}\ndate: {get_datetime_for_frontmatter()}\nimage: {self.image_url}\nllm: {self.llm}\n---\n'
             f'![Alt Text]({self.image_url} "{self.image_prompt}")\n\n{self.content}'
         )
 
@@ -360,7 +360,7 @@ Original  News Headline: """
 @stub.local_entrypoint()
 def main():
     articles = get_news_articles(os.environ["GNEWS_API_KEY"], query, 1)
-    stories = generate_post_respell.map(articles)
+    stories = generate_post.map(articles)
 
     # Write the stories to disk for local testing
     for story in stories:
