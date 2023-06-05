@@ -2,7 +2,6 @@ import modal
 import os
 import re
 from datetime import datetime
-import pytz
 import base64
 import json
 
@@ -26,6 +25,7 @@ if stub.is_inside():
     import cloudinary.uploader
     import tweepy
     import requests
+    import pytz
 
 
 def commit_new_blog_post(filename, content):
