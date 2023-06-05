@@ -259,7 +259,7 @@ def generate_post_respell(article):
         try:
             new_story = get_respell_completion(title)
             new_title, content = split_string(new_story["story"])
-            story = Story(title, new_title, content)
+            story = Story(article, new_title, content)
             story.llm = "ChatGPT-4"
 
             story.image_prompt = new_story["image_prompt"]
