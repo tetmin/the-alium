@@ -122,8 +122,9 @@ def clean_filename(filename):
 
 
 class Story:
-    def __init__(self, original_title, title, content):
-        self.original_title = original_title
+    def __init__(self, original_article, title, content):
+        self.original_article = original_article
+        self.original_title = original_article["title"]
         self.title = title
         self.content = content
         self.image_prompt = ""
@@ -142,11 +143,12 @@ class Story:
         return (
             f'---\ntitle: "{title_with_single_quotes}"\ndate: {get_datetime_for_frontmatter()}\nimage: {self.image_url}\nllm: {self.llm}\n---\n'
             f'![Alt Text]({self.image_url} "{image_prompt_with_single_quotes}")\n\n{self.content}'
+            f'\n\n---\n*AInspired by: [{self.original_title}]({self.original_article["url"]})*'
         )
 
     def jekyll_file_name(self):
         return (
-            f"{get_date_for_filename()}-{clean_filename(self.original_title)}.MARKDOWN"
+            f"{get_date_for_filename()}-{clean_filename(self.original_title)}.md"
         )
 
     def write_jekyll_file(self, path=""):
@@ -160,7 +162,7 @@ class Story:
     def get_jekyll_post_url(self):
         # Extract the date and name from the filename
         match = re.match(
-            r"(\d{4})-(\d{2})-(\d{2})-(.*)\.MARKDOWN", self.jekyll_file_name()
+            r"(\d{4})-(\d{2})-(\d{2})-(.*)\.md", self.jekyll_file_name()
         )
         if not match:
             raise ValueError(f"Invalid filename: {self.jekyll_file_name()}")
@@ -257,7 +259,7 @@ def generate_post_respell(article):
         try:
             new_story = get_respell_completion(title)
             new_title, content = split_string(new_story["story"])
-            story = Story(title, new_title, content)
+            story = Story(article, new_title, content)
             story.llm = "ChatGPT-4"
 
             story.image_prompt = new_story["image_prompt"]
@@ -279,7 +281,7 @@ def generate_post(article):
     if b_new_story(title) and not get_moderation_flag(prompt + title):
         new_story = get_completion(prompt + title)
         new_title, content = split_string(new_story)
-        story = Story(title, new_title, content)
+        story = Story(article, new_title, content)
         story.llm = "ChatGPT-3.5"
 
         # Get ChatGPT to generate a prompt for Dall-E to generate an image for each story
@@ -317,7 +319,13 @@ Image Idea:"""
         except openai.error.OpenAIError as e:
             print(f"Image generation failed for: {story.image_prompt}")
             print(e.error)
-
+    
+    elif not b_new_story(title):
+        print(f"Title has already been used: {title}")
+    elif get_moderation_flag(prompt + title):
+        print(f"Title failed moderation: {title}")
+    else:
+        print("Unknown error")
     return story
 
 
@@ -362,7 +370,7 @@ Original  News Headline: """
 @stub.local_entrypoint()
 def main():
     articles = get_news_articles(os.environ["GNEWS_API_KEY"], query, 1)
-    stories = generate_post_respell.map(articles)
+    stories = generate_post.map(articles)
 
     # Write the stories to disk for local testing
     for story in stories:
