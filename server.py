@@ -19,6 +19,7 @@ stub = modal.Stub(
         modal.Secret.from_name("toms-openai-secret"),
         modal.Secret.from_name("toms-cloudinary-secret"),
         modal.Secret.from_name("toms-respell-secret"),
+        modal.Secret.from_name("toms-simplescraper-secret"),
     ],
 )
 if stub.is_inside():
@@ -58,25 +59,48 @@ def commit_new_blog_post(filename, content):
 
 
 # Get some topical news article headlines
-def get_news_articles(api_key, query, n_articles):
+def get_news_articles(api_key, query, n_articles, source="metaphor"):
     import requests
-
-    url = f"https://gnews.io/api/v4/search?q={query}&max={n_articles}&token={api_key}"
-    response = requests.get(url)
-    data = response.json()
 
     titles = []
 
-    if response.status_code == 200:
-        articles = data.get("articles", [])
-        for article in articles:
-            titles.append(article.get("title"))
-            print(f"Title: {titles[-1]}")
-            print("--------------")
-        return articles
-    else:
-        print("Failed to retrieve news articles.")
-        return []
+    if source == "gnews":
+        url = (
+            f"https://gnews.io/api/v4/search?q={query}&max={n_articles}&token={api_key}"
+        )
+        response = requests.get(url)
+        data = response.json()
+
+        if response.status_code == 200:
+            articles = data.get("articles", [])
+            for article in articles:
+                titles.append(article.get("title"))
+                print(f"Title: {titles[-1]}")
+                print("--------------")
+            return articles
+        else:
+            print("Failed to retrieve news articles.")
+            return []
+    elif source == "metaphor":
+        url = f"https://simplescraper.io/api/tSPVe73sK0UwV8qSzPrW?apikey={api_key}"
+        response = requests.get(url)
+        data = response.json()
+
+        if response.status_code == 200:
+            articles = data.get("data", [])
+            # limit response to n_articles
+            articles = articles[:n_articles]
+            for article in articles:
+                # rename json key headline to title
+                article["title"] = article.pop("headline")
+                article["url"] = article.pop("source_link")
+                titles.append(article.get("title"))
+                print(f"Title: {titles[-1]}")
+                print("--------------")
+            return articles
+        else:
+            print("Failed to retrieve news articles.")
+            return []
 
 
 def get_datetime_for_frontmatter():
@@ -359,8 +383,9 @@ Original  News Headline: """
 @stub.local_entrypoint()
 def main():
     from dotenv import load_dotenv
+
     load_dotenv()
-    articles = get_news_articles(os.environ["GNEWS_API_KEY"], query, 1)
+    articles = get_news_articles(os.environ["SIMPLESCRAPER_API_KEY"], query, 1)
     stories = generate_post.map(articles)
 
     # Write the stories to disk for local testing
@@ -372,7 +397,7 @@ def main():
 # Deploy to Modal and generate 3 articles per day
 @stub.function(schedule=modal.Cron("1 6,14,22 * * *"))
 def scheduled():
-    articles = get_news_articles(os.environ["GNEWS_API_KEY"], query, 1)
+    articles = get_news_articles(os.environ["SIMPLESCRAPER_API_KEY"], query, 1)
     stories = generate_post_respell.map(articles)
 
     # commit each post to GitHub
