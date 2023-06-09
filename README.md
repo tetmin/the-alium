@@ -2,14 +2,14 @@
 Generating satirical AI news using AI.
 
 New articles are generated & posted 3 times daily on www.thealium.com & shared [@alium_ai](https://twitter.com/alium_ai):
-- Get top article matching the 'artificial intelligence' filter from GNews API
+- Get top article matching the 'artificial intelligence' filter from GNews API or Metaphor
 - Generate satirical article based only on the title using GPT-4 (with fallback to GPT 3.5)
 - Generate image prompt with GPT 3.5 & image with DALLE-2
 - Create post as a markdown file
 
 ## TODO
 - [x] ~~Find a better news source than [GNews API](https://gnews.io/)~~
-- [ ] Improve image generation (article title -> image prompt is not very good)
+- [ ] Improve image generation (article title -> image prompt is not very good & gets cencored sometimes)
 
 ## Usage Guide
 ### Development Setup
