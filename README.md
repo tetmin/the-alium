@@ -8,7 +8,7 @@ New articles are generated & posted 3 times daily on www.thealium.com & shared [
 - Create post as a markdown file
 
 ## TODO
-- [ ] Find a better news source than [GNews API](https://gnews.io/)
+- [x] ~~Find a better news source than [GNews API](https://gnews.io/)~~
 - [ ] Improve image generation (article title -> image prompt is not very good)
 
 ## Usage Guide
