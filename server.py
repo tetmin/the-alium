@@ -7,7 +7,11 @@ import json
 
 
 # Setup the Modal Labs image
-image = modal.Image.debian_slim().poetry_install_from_file("pyproject.toml")
+image = (
+    modal.Image.debian_slim()
+    .poetry_install_from_file("pyproject.toml")
+    .pip_install("sentence-transformers")
+)
 stub = modal.Stub(
     name="the-alium",
     image=image,
@@ -58,12 +62,38 @@ def commit_new_blog_post(filename, content):
     response = requests.put(url, headers=headers, data=json.dumps(data))
 
 
+@stub.function(gpu="T4")
+def deduplicate_articles(articles):
+    from sentence_transformers import SentenceTransformer
+    from sklearn.metrics.pairwise import cosine_similarity
+    import numpy as np
+
+    titles = [article["title"] for article in articles]
+
+    # Create embeddings & pairwise similarities
+    model = SentenceTransformer("all-mpnet-base-v2")
+    embeddings = model.encode(titles)
+    similarities = cosine_similarity(embeddings)
+    threshold = 0.5
+
+    # Deduplicate based on semantic similarity
+    duplicate_indices = []
+    for i in range(len(titles)):
+        if i not in duplicate_indices:
+            for j in range(i + 1, len(titles)):
+                # Mark as duplicate if the sentences are semantically similar and the other sentence hasn't been marked
+                if similarities[i, j] > threshold and j not in duplicate_indices:
+                    duplicate_indices.append(j)
+
+    # Deduplicate the articles
+    return [article for i, article in enumerate(articles) if i not in duplicate_indices]
+
+
 # Get some topical news article headlines
 def get_news_articles(api_key, query, n_articles, source="metaphor"):
     import requests
 
     titles = []
-
     if source == "gnews":
         url = (
             f"https://gnews.io/api/v4/search?q={query}&max={n_articles}&token={api_key}"
@@ -73,31 +103,26 @@ def get_news_articles(api_key, query, n_articles, source="metaphor"):
 
         if response.status_code == 200:
             articles = data.get("articles", [])
-            for article in articles:
-                titles.append(article.get("title"))
-                print(f"Title: {titles[-1]}")
-                print("--------------")
             return articles
         else:
             print("Failed to retrieve news articles.")
             return []
     elif source == "metaphor":
-        # TODO: Deduplicate similar headlines using embeddings
         url = f"https://simplescraper.io/api/tSPVe73sK0UwV8qSzPrW?apikey={api_key}"
         response = requests.get(url)
         data = response.json()
 
         if response.status_code == 200:
             articles = data.get("data", [])
-            # limit response to n_articles
-            articles = articles[:n_articles]
             for article in articles:
                 # rename json key headline to title
                 article["title"] = article.pop("headline")
                 article["url"] = article.pop("source_link")
-                titles.append(article.get("title"))
-                print(f"Title: {titles[-1]}")
-                print("--------------")
+            # remove duplicate headlines using embeddings
+            articles = deduplicate_articles.call(articles)
+            print("\n".join([article["title"] for article in articles]))
+            # limit response to n_articles
+            articles = articles[:n_articles]
             return articles
         else:
             print("Failed to retrieve news articles.")
@@ -106,6 +131,7 @@ def get_news_articles(api_key, query, n_articles, source="metaphor"):
 
 def get_datetime_for_frontmatter():
     import pytz
+
     # Get the current date and time in UTC
     now = datetime.now(pytz.utc)
 
@@ -119,6 +145,7 @@ def get_datetime_for_frontmatter():
 
 def get_date_for_filename():
     import pytz
+
     # Get the current date and time in UTC
     now = datetime.now(pytz.utc)
 
@@ -164,8 +191,8 @@ class Story:
         print("------------")
 
     def jekyll_file_content(self):
-        title_with_single_quotes = self.title.replace("\"", "'")
-        image_prompt_with_single_quotes = self.image_prompt.replace("\"", "'")
+        title_with_single_quotes = self.title.replace('"', "'")
+        image_prompt_with_single_quotes = self.image_prompt.replace('"', "'")
         return (
             f'---\ntitle: "{title_with_single_quotes}"\ndate: {get_datetime_for_frontmatter()}\nimage: {self.image_url}\nllm: {self.llm}\n---\n'
             f'![Alt Text]({self.image_url} "{image_prompt_with_single_quotes}")\n\n{self.content}'
@@ -173,9 +200,7 @@ class Story:
         )
 
     def jekyll_file_name(self):
-        return (
-            f"{get_date_for_filename()}-{clean_filename(self.original_title)}.md"
-        )
+        return f"{get_date_for_filename()}-{clean_filename(self.original_title)}.md"
 
     def write_jekyll_file(self, path=""):
         if path:
@@ -187,9 +212,7 @@ class Story:
     # Generate Jekyll post URL from Markdown filename
     def get_jekyll_post_url(self):
         # Extract the date and name from the filename
-        match = re.match(
-            r"(\d{4})-(\d{2})-(\d{2})-(.*)\.md", self.jekyll_file_name()
-        )
+        match = re.match(r"(\d{4})-(\d{2})-(\d{2})-(.*)\.md", self.jekyll_file_name())
         if not match:
             raise ValueError(f"Invalid filename: {self.jekyll_file_name()}")
         year = match.group(1)
@@ -344,7 +367,7 @@ Image Idea:"""
         except openai.error.OpenAIError as e:
             print(f"Image generation failed for: {story.image_prompt}")
             print(e.error)
-    
+
     elif not b_new_story(title):
         print(f"Title has already been used: {title}")
     elif get_moderation_flag(prompt + title):
@@ -395,6 +418,7 @@ Original  News Headline: """
 @stub.local_entrypoint()
 def main():
     from dotenv import load_dotenv
+
     load_dotenv()
 
     articles = get_news_articles(os.environ["SIMPLESCRAPER_API_KEY"], query, 10)
