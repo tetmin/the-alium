@@ -30,6 +30,7 @@ if stub.is_inside():
     import tweepy
     import requests
     import pytz
+    from sklearn.metrics.pairwise import cosine_similarity
 
 
 def commit_new_blog_post(filename, content):
@@ -62,9 +63,6 @@ def commit_new_blog_post(filename, content):
 
 
 def deduplicate_articles(articles):
-    from sklearn.metrics.pairwise import cosine_similarity
-    import numpy as np
-
     titles = [article["title"] for article in articles]
 
     # Create embeddings & pairwise similarities
@@ -294,9 +292,16 @@ def get_existing_titles():
 def b_new_story(title):
     """Check to make sure we haven't done this story already."""
     # Get index of story titles already in repo
-    existing_titles = get_existing_titles()
-    # return match result
-    return clean_filename(title) not in existing_titles
+    existing_titles = [title.replace('_', ' ') for title in get_existing_titles()]
+    # check the title for semantically similar existing titles
+    response = openai.Embedding.create(input=existing_titles, model="text-embedding-ada-002")['data']
+    embeddings = [data['embedding'] for data in response]
+    # get the embedding of the title
+    title_embedding = openai.Embedding.create(input=title, model="text-embedding-ada-002")['data'][0]['embedding']
+    # compute cosine similarity between title & all existing titles
+    similarities = cosine_similarity([title_embedding], embeddings)[0]
+    # if any existing articles are too similar, return false
+    return not any(similarities > 0.9)
 
 
 @stub.function()
@@ -437,9 +442,12 @@ def scheduled():
     articles = get_news_articles(os.environ["SIMPLESCRAPER_API_KEY"], query, 3)
     n_articles_to_generate = 1
     is_new_article = [b_new_story(article["title"]) for article in articles]
+    print(is_new_article)
     # Filter out articles that have already been generated & only keep n_articles_to_generate
     articles = list(filter(lambda x: x[0], zip(is_new_article, articles)))
     articles = [x[1] for x in articles][:n_articles_to_generate]
+    # Uncomment below for local testing, ensures we don't run respell & commit to GitHub
+    #exit()
     stories = generate_post_respell.map(articles)
 
     # commit each post to GitHub
