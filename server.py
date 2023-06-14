@@ -82,6 +82,7 @@ def get_news_articles(api_key, query, n_articles, source="metaphor"):
             print("Failed to retrieve news articles.")
             return []
     elif source == "metaphor":
+        # TODO: Deduplicate similar headlines using embeddings
         url = f"https://simplescraper.io/api/tSPVe73sK0UwV8qSzPrW?apikey={api_key}"
         response = requests.get(url)
         data = response.json()
@@ -262,7 +263,7 @@ def get_existing_titles():
 
         # Print the name of each file in the directory
         for file in data:
-            names.append(file["name"][11:-9])
+            names.append(file["name"][11:-3])
 
     return names
 
@@ -271,7 +272,6 @@ def b_new_story(title):
     """Check to make sure we haven't done this story already."""
     # Get index of story titles already in repo
     existing_titles = get_existing_titles()
-
     # return match result
     return clean_filename(title) not in existing_titles
 
@@ -416,7 +416,7 @@ def scheduled():
     # Filter out articles that have already been generated & only keep n_articles_to_generate
     articles = list(filter(lambda x: x[0], zip(is_new_article, articles)))
     articles = [x[1] for x in articles][:n_articles_to_generate]
-    stories = generate_post.map(articles)
+    stories = generate_post_respell.map(articles)
 
     # commit each post to GitHub
     for story in stories:
