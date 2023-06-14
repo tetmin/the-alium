@@ -10,7 +10,6 @@ import json
 image = (
     modal.Image.debian_slim()
     .poetry_install_from_file("pyproject.toml")
-    .pip_install("sentence-transformers")
 )
 stub = modal.Stub(
     name="the-alium",
@@ -62,19 +61,20 @@ def commit_new_blog_post(filename, content):
     response = requests.put(url, headers=headers, data=json.dumps(data))
 
 
-@stub.function(gpu="T4")
 def deduplicate_articles(articles):
-    from sentence_transformers import SentenceTransformer
     from sklearn.metrics.pairwise import cosine_similarity
     import numpy as np
 
     titles = [article["title"] for article in articles]
 
     # Create embeddings & pairwise similarities
-    model = SentenceTransformer("all-mpnet-base-v2")
-    embeddings = model.encode(titles)
+    #from sentence_transformers import SentenceTransformer
+    #model = SentenceTransformer("all-mpnet-base-v2")
+    #embeddings = model.encode(titles)
+    response = openai.Embedding.create(input=titles, model="text-embedding-ada-002")['data']
+    embeddings = [data['embedding'] for data in response]
     similarities = cosine_similarity(embeddings)
-    threshold = 0.5
+    threshold = 0.8 #0.5 best for sentence-transformers
 
     # Deduplicate based on semantic similarity
     duplicate_indices = []
@@ -119,7 +119,7 @@ def get_news_articles(api_key, query, n_articles, source="metaphor"):
                 article["title"] = article.pop("headline")
                 article["url"] = article.pop("source_link")
             # remove duplicate headlines using embeddings
-            articles = deduplicate_articles.call(articles)
+            articles = deduplicate_articles(articles)
             print("\n".join([article["title"] for article in articles]))
             # limit response to n_articles
             articles = articles[:n_articles]
