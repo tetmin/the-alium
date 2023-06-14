@@ -397,7 +397,8 @@ def main():
     from dotenv import load_dotenv
     load_dotenv()
 
-    articles = get_news_articles(os.environ["SIMPLESCRAPER_API_KEY"], query, 1)
+    articles = get_news_articles(os.environ["SIMPLESCRAPER_API_KEY"], query, 10)
+    print(articles)
     stories = generate_post.map(articles)
 
     # Write the stories to disk for local testing
@@ -409,8 +410,13 @@ def main():
 # Deploy to Modal and generate 3 articles per day
 @stub.function(schedule=modal.Cron("1 6,14,22 * * *"))
 def scheduled():
-    articles = get_news_articles(os.environ["SIMPLESCRAPER_API_KEY"], query, 1)
-    stories = generate_post_respell.map(articles)
+    articles = get_news_articles(os.environ["SIMPLESCRAPER_API_KEY"], query, 3)
+    n_articles_to_generate = 1
+    is_new_article = [b_new_story(article["title"]) for article in articles]
+    # Filter out articles that have already been generated & only keep n_articles_to_generate
+    articles = list(filter(lambda x: x[0], zip(is_new_article, articles)))
+    articles = [x[1] for x in articles][:n_articles_to_generate]
+    stories = generate_post.map(articles)
 
     # commit each post to GitHub
     for story in stories:
