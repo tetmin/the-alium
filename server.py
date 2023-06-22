@@ -63,6 +63,7 @@ def commit_new_blog_post(filename, content):
 
 
 def deduplicate_articles(articles):
+    articles = [article for article in articles if article['headline'] is not None]
     titles = [article["title"] for article in articles]
 
     # Create embeddings & pairwise similarities
