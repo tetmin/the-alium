@@ -63,7 +63,7 @@ def commit_new_blog_post(filename, content):
 
 
 def deduplicate_articles(articles):
-    articles = [article for article in articles if article['headline'] is not None]
+    articles = [article for article in articles if article["title"] is not None]
     titles = [article["title"] for article in articles]
 
     # Create embeddings & pairwise similarities
@@ -89,25 +89,11 @@ def deduplicate_articles(articles):
 
 
 # Get some topical news article headlines
-def get_news_articles(api_key, query, n_articles, source="metaphor"):
+def get_news_articles(query, n_articles):
     import requests
 
-    titles = []
-    if source == "gnews":
-        url = (
-            f"https://gnews.io/api/v4/search?q={query}&max={n_articles}&token={api_key}"
-        )
-        response = requests.get(url)
-        data = response.json()
-
-        if response.status_code == 200:
-            articles = data.get("articles", [])
-            return articles
-        else:
-            print("Failed to retrieve news articles.")
-            return []
-    elif source == "metaphor":
-        url = f"https://simplescraper.io/api/tSPVe73sK0UwV8qSzPrW?apikey={api_key}"
+    try:
+        url = f"https://simplescraper.io/api/tSPVe73sK0UwV8qSzPrW?apikey={os.environ['SIMPLESCRAPER_API_KEY']}"
         response = requests.get(url)
         data = response.json()
 
@@ -122,6 +108,19 @@ def get_news_articles(api_key, query, n_articles, source="metaphor"):
             print("\n".join([article["title"] for article in articles]))
             # limit response to n_articles
             articles = articles[:n_articles]
+            return articles
+        else:
+            print("Failed to retrieve news articles.")
+            return []
+    except:
+        url = (
+            f"https://gnews.io/api/v4/search?q={query}&max={n_articles}&token={os.environ['GNEWS_API_KEY']}"
+        )
+        response = requests.get(url)
+        data = response.json()
+
+        if response.status_code == 200:
+            articles = data.get("articles", [])
             return articles
         else:
             print("Failed to retrieve news articles.")
@@ -251,6 +250,7 @@ def get_respell_completion(title):
                 },
             }
         ),
+        timeout=60
     )
 
     return response.json().get("outputs")
@@ -312,6 +312,7 @@ def generate_post_respell(article):
     if b_new_story(title) and not get_moderation_flag(prompt + title):
         try:
             new_story = get_respell_completion(title)
+            print(new_story)
             new_title, content = split_string(new_story["story"])
             story = Story(article, new_title, content)
             story.llm = "ChatGPT-4"
@@ -427,7 +428,7 @@ def main():
 
     load_dotenv()
 
-    articles = get_news_articles(os.environ["SIMPLESCRAPER_API_KEY"], query, 10)
+    articles = get_news_articles(query, 10)
     print(articles)
     stories = generate_post.map(articles)
 
@@ -440,7 +441,7 @@ def main():
 # Deploy to Modal and generate 3 articles per day
 @stub.function(schedule=modal.Cron("1 6,14,22 * * *"))
 def scheduled():
-    articles = get_news_articles(os.environ["SIMPLESCRAPER_API_KEY"], query, 3)
+    articles = get_news_articles(query, 10)
     n_articles_to_generate = 1
     is_new_article = [b_new_story(article["title"]) for article in articles]
     print(is_new_article)
