@@ -22,6 +22,7 @@ stub = modal.Stub(
         modal.Secret.from_name("toms-cloudinary-secret"),
         modal.Secret.from_name("toms-respell-secret"),
         modal.Secret.from_name("toms-simplescraper-secret"),
+        modal.Secret.from_name("toms-metaphor-secret"),
     ],
 )
 if stub.is_inside():
@@ -93,25 +94,21 @@ def get_news_articles(query, n_articles):
     import requests
 
     try:
-        url = f"https://simplescraper.io/api/tSPVe73sK0UwV8qSzPrW?apikey={os.environ['SIMPLESCRAPER_API_KEY']}"
-        response = requests.get(url)
-        data = response.json()
+        url = "https://api.metaphor.systems/search"
 
-        if response.status_code == 200:
-            articles = data.get("data", [])
-            for article in articles:
-                # rename json key headline to title
-                article["title"] = article.pop("headline")
-                article["url"] = article.pop("source_link")
-            # remove duplicate headlines using embeddings
-            articles = deduplicate_articles(articles)
-            print("\n".join([article["title"] for article in articles]))
-            # limit response to n_articles
-            articles = articles[:n_articles]
-            return articles
-        else:
-            print("Failed to retrieve news articles.")
-            return []
+        payload = {
+            "query": "If you're interested in news about innovations in AI by people or companies, you need to check out this article:",
+            "numResults": 10,
+            "startPublishedDate": "2023-07-03T00:00:00Z"
+        }
+        headers = {
+            "accept": "application/json",
+            "content-type": "application/json",
+            "x-api-key": os.environ["METAPHOR_API_KEY"]
+        }
+
+        response = requests.post(url, json=payload, headers=headers)
+        data = response.json()
     except:
         url = (
             f"https://gnews.io/api/v4/search?q={query}&max={n_articles}&token={os.environ['GNEWS_API_KEY']}"
@@ -119,12 +116,20 @@ def get_news_articles(query, n_articles):
         response = requests.get(url)
         data = response.json()
 
-        if response.status_code == 200:
+    if response.status_code == 200:
+        if 'articles' in data:
             articles = data.get("articles", [])
-            return articles
         else:
-            print("Failed to retrieve news articles.")
-            return []
+            articles = data.get("results", [])
+        # remove duplicate headlines using embeddings
+        articles = deduplicate_articles(articles)
+        print("\n".join([article["title"] for article in articles]))
+        # limit response to n_articles
+        articles = articles[:n_articles]
+        return articles
+    else:
+        print("Failed to retrieve news articles.")
+        return []
 
 
 def get_datetime_for_frontmatter():
@@ -449,7 +454,7 @@ def scheduled():
     articles = list(filter(lambda x: x[0], zip(is_new_article, articles)))
     articles = [x[1] for x in articles][:n_articles_to_generate]
     # Uncomment below for local testing, ensures we don't run respell & commit to GitHub
-    #exit()
+    # exit()
     stories = generate_post_respell.map(articles)
 
     # commit each post to GitHub
