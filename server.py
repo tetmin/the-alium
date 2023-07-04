@@ -99,7 +99,7 @@ def get_news_articles(query, n_articles):
         payload = {
             "query": "If you're interested in news about innovations in AI by people or companies, you need to check out this article:",
             "numResults": 10,
-            "startPublishedDate": "2023-07-03T00:00:00Z"
+            "startPublishedDate": datetime.today().strftime('%Y-%m-%dT00:00:00Z')
         }
         headers = {
             "accept": "application/json",
