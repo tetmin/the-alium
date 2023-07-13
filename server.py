@@ -1,7 +1,7 @@
 import modal
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import base64
 import json
 
@@ -20,7 +20,6 @@ stub = modal.Stub(
         modal.Secret.from_name("mark-gnews-secret"),
         modal.Secret.from_name("toms-openai-secret"),
         modal.Secret.from_name("toms-cloudinary-secret"),
-        modal.Secret.from_name("toms-respell-secret"),
         modal.Secret.from_name("toms-simplescraper-secret"),
         modal.Secret.from_name("toms-metaphor-secret"),
     ],
@@ -99,7 +98,7 @@ def get_news_articles(query, n_articles):
         payload = {
             "query": "If you're interested in news about innovations in AI by people or companies, you need to check out this article:",
             "numResults": 10,
-            "startPublishedDate": datetime.today().strftime('%Y-%m-%dT00:00:00Z')
+            "startPublishedDate": (datetime.today() - timedelta(days=3)).strftime('%Y-%m-%dT00:00:00Z')
         }
         headers = {
             "accept": "application/json",
@@ -109,18 +108,22 @@ def get_news_articles(query, n_articles):
 
         response = requests.post(url, json=payload, headers=headers)
         data = response.json()
+        print('returned articles from Metaphor')
     except:
         url = (
             f"https://gnews.io/api/v4/search?q={query}&max={n_articles}&token={os.environ['GNEWS_API_KEY']}"
         )
         response = requests.get(url)
         data = response.json()
+        print('returned articles from GNews')
 
+    print(data)
     if response.status_code == 200:
         if 'articles' in data:
             articles = data.get("articles", [])
         else:
             articles = data.get("results", [])
+
         # remove duplicate headlines using embeddings
         articles = deduplicate_articles(articles)
         print("\n".join([article["title"] for article in articles]))
@@ -228,37 +231,12 @@ class Story:
         return URL
 
 
-def get_completion(prompt, model="gpt-3.5-turbo"):
-    messages = [{"role": "user", "content": prompt}]
+def get_completion(prompt, content, model="gpt-3.5-turbo"):
+    messages = [{"role": "system", "content": prompt}, {"role": "user", "content": content}]
     response = openai.ChatCompletion.create(
-        model=model, messages=messages, temperature=0.7, max_tokens=1000
+        model=model, messages=messages, temperature=1.2, max_tokens=1000
     )
     return response.choices[0].message["content"]
-
-
-# Uses Respell for GPT-4 access
-def get_respell_completion(title):
-    response = requests.post(
-        "https://api.respell.ai/v1/run",
-        headers={
-            # This is your API key
-            "Authorization": "Bearer " + os.environ["RESPELL_TOKEN"],
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        },
-        data=json.dumps(
-            {
-                "spellId": "wd8KSLZz7WVCT5dh0ysas",
-                "inputs": {
-                    "title": title,
-                    "dummy": "",
-                },
-            }
-        ),
-        timeout=60
-    )
-
-    return response.json().get("outputs")
 
 
 def get_moderation_flag(prompt):
@@ -311,38 +289,16 @@ def b_new_story(title):
 
 
 @stub.function()
-def generate_post_respell(article):
-    title = article.get("title")
-    story = None
-    if b_new_story(title) and not get_moderation_flag(prompt + title):
-        try:
-            new_story = get_respell_completion(title)
-            print(new_story)
-            new_title, content = split_string(new_story["story"])
-            story = Story(article, new_title, content)
-            story.llm = "ChatGPT-4"
-
-            story.image_prompt = new_story["image_prompt"]
-            story.image_url = new_story["image"]
-            response = cloudinary.uploader.upload(story.image_url)
-            story.image_url = response["secure_url"]
-        except:
-            print("Error generating story using Respell, switching to ChatGPT-3.5")
-            story = generate_post(article)
-
-    return story
-
-
-@stub.function()
-def generate_post(article):
+def generate_post(article, model="gpt-4"):
     # Call ChatGPT to generate the stories
     title = article.get("title")
     story = None
-    if b_new_story(title) and not get_moderation_flag(prompt + title):
-        new_story = get_completion(prompt + title)
+    # Check the article title passes moderation
+    if not get_moderation_flag(title):
+        new_story = get_completion(prompt, title, model=model)
         new_title, content = split_string(new_story)
         story = Story(article, new_title, content)
-        story.llm = "ChatGPT-3.5"
+        story.llm = "ChatGPT-4"
 
         # Get ChatGPT to generate a prompt for Dall-E to generate an image for each story
         story.image_prompt = get_completion(
@@ -355,12 +311,10 @@ News Headline: AI Blamed for Massive Unemployment, Robots Celebrate Victory
 Image Idea: Excited Robots celebrating victory, photographic style
 
 News Headline: Global leaders fear extinction from AI, but AI not sure who they are
-Image Idea: Scared politicians searching for answers, photographic style
-
-News Headline: {story.title}
-Image Idea:"""
-        )
-        # check the image prompt is not flagged
+Image Idea: Scared politicians searching for answers, photographic style""",
+            content=f"""News Headline: {story.title}""", model='gpt-3.5-turbo')
+        
+        # check the image prompt passes moderation
         if get_moderation_flag(story.image_prompt):
             print(f"Image prompt failed moderation: {story.image_prompt}")
             story = None
@@ -379,13 +333,8 @@ Image Idea:"""
         except openai.error.OpenAIError as e:
             print(f"Image generation failed for: {story.image_prompt}")
             print(e.error)
-
-    elif not b_new_story(title):
-        print(f"Title has already been used: {title}")
-    elif get_moderation_flag(prompt + title):
-        print(f"Title failed moderation: {title}")
     else:
-        print("Unknown error")
+        print("Moderation issue with the article title")
     return story
 
 
@@ -405,7 +354,7 @@ def tweet_article(story):
 # Specify the query filter for articles (e.g., "artificial intelligence")
 query = "artificial intelligence"
 
-prompt = f"""You are a staff writer at The Daily Mash. Write a parody of the provided original news headline in the style of The Daily Mash. Ensure any proper names changed to humorous ones as the Daily Mash usually does. Make the article no more than 200 words long. Include Markdown formatting for Jekyll. Below are some examples of Daily Mash style articles to give you an idea of the style.\n
+prompt = f"""You are a staff writer at The Daily Mash & The Onion. You will be provided with a news headline, your task is to write a satirical version of it in the style of The Daily Mash & The Onion. Make the article no more than 200 words long. Below are some examples of good satirical articles to give you an idea of the expected style:\n
 
 Article Example:
 # Man who can’t spell basic words demands you take his opinions seriously
@@ -423,39 +372,23 @@ The AI machine was fitted with a specially-adapted USB cable with a pint glass o
 Hayes said: “I was confident from the start because that computer just didn’t have the red, bulky look of a drinker about it.\n
 “They can build these machines that can do all sums and everything, but they’ll never take over from man if they can’t handle 15-16 pints of export lager.”\n
 However the Google spokesman added: “We should have added a ‘piss port’ to allow DeepMind to expel fluids. Also I think a little slot that you tip pork scratchings into would help.”\n
-
-Original  News Headline: """
-
-
-@stub.local_entrypoint()
-def main():
-    from dotenv import load_dotenv
-
-    load_dotenv()
-
-    articles = get_news_articles(query, 10)
-    print(articles)
-    stories = generate_post.map(articles)
-
-    # Write the stories to disk for local testing
-    for story in stories:
-        if story is not None:
-            story.write_jekyll_file("_posts")
+"""
 
 
 # Deploy to Modal and generate 3 articles per day
 @stub.function(schedule=modal.Cron("1 6,14,22 * * *"))
 def scheduled():
     articles = get_news_articles(query, 10)
-    n_articles_to_generate = 1
-    is_new_article = [b_new_story(article["title"]) for article in articles]
-    print(is_new_article)
+    titles = [article["title"] for article in articles]
+    is_new_article = [b_new_story(title) for title in titles]
+    print(list(zip(is_new_article, titles)))
     # Filter out articles that have already been generated & only keep n_articles_to_generate
     articles = list(filter(lambda x: x[0], zip(is_new_article, articles)))
+    n_articles_to_generate = 1
     articles = [x[1] for x in articles][:n_articles_to_generate]
-    # Uncomment below for local testing, ensures we don't run respell & commit to GitHub
+    # Uncomment below or switch to GPT-3.5 for local testing, ensures we don't run GPT-4 & commit to GitHub
     # exit()
-    stories = generate_post_respell.map(articles)
+    stories = generate_post.map(articles)
 
     # commit each post to GitHub
     for story in stories:
