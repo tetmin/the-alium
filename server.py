@@ -1,7 +1,7 @@
 import modal
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import base64
 import json
 
@@ -99,7 +99,7 @@ def get_news_articles(query, n_articles):
         payload = {
             "query": "If you're interested in news about innovations in AI by people or companies, you need to check out this article:",
             "numResults": 10,
-            "startPublishedDate": datetime.today().strftime('%Y-%m-%dT00:00:00Z')
+            "startPublishedDate": (datetime.today() - timedelta(days=3)).strftime('%Y-%m-%dT00:00:00Z')
         }
         headers = {
             "accept": "application/json",
@@ -109,18 +109,22 @@ def get_news_articles(query, n_articles):
 
         response = requests.post(url, json=payload, headers=headers)
         data = response.json()
+        print('returned articles from Metaphor')
     except:
         url = (
             f"https://gnews.io/api/v4/search?q={query}&max={n_articles}&token={os.environ['GNEWS_API_KEY']}"
         )
         response = requests.get(url)
         data = response.json()
+        print('returned articles from GNews')
 
+    print(data)
     if response.status_code == 200:
         if 'articles' in data:
             articles = data.get("articles", [])
         else:
             articles = data.get("results", [])
+
         # remove duplicate headlines using embeddings
         articles = deduplicate_articles(articles)
         print("\n".join([article["title"] for article in articles]))
@@ -454,7 +458,7 @@ def scheduled():
     articles = list(filter(lambda x: x[0], zip(is_new_article, articles)))
     articles = [x[1] for x in articles][:n_articles_to_generate]
     # Uncomment below for local testing, ensures we don't run respell & commit to GitHub
-    # exit()
+    exit()
     stories = generate_post_respell.map(articles)
 
     # commit each post to GitHub
