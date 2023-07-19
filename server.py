@@ -234,7 +234,7 @@ class Story:
 def get_completion(prompt, content, model="gpt-3.5-turbo"):
     messages = [{"role": "system", "content": prompt}, {"role": "user", "content": content}]
     response = openai.ChatCompletion.create(
-        model=model, messages=messages, temperature=1.2, max_tokens=1000
+        model=model, messages=messages, temperature=0.8, max_tokens=1000
     )
     return response.choices[0].message["content"]
 
