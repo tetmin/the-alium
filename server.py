@@ -7,10 +7,7 @@ import json
 
 
 # Setup the Modal Labs image
-image = (
-    modal.Image.debian_slim()
-    .poetry_install_from_file("pyproject.toml")
-)
+image = modal.Image.debian_slim().poetry_install_from_file("pyproject.toml")
 stub = modal.Stub(
     name="the-alium",
     image=image,
@@ -61,13 +58,15 @@ def deduplicate_articles(articles):
     titles = [article["title"] for article in articles]
 
     # Create embeddings & pairwise similarities
-    #from sentence_transformers import SentenceTransformer
-    #model = SentenceTransformer("all-mpnet-base-v2")
-    #embeddings = model.encode(titles)
-    response = openai.Embedding.create(input=titles, model="text-embedding-ada-002")['data']
-    embeddings = [data['embedding'] for data in response]
+    # from sentence_transformers import SentenceTransformer
+    # model = SentenceTransformer("all-mpnet-base-v2")
+    # embeddings = model.encode(titles)
+    response = openai.Embedding.create(input=titles, model="text-embedding-ada-002")[
+        "data"
+    ]
+    embeddings = [data["embedding"] for data in response]
     similarities = cosine_similarity(embeddings)
-    threshold = 0.8 #0.5 best for sentence-transformers
+    threshold = 0.8  # 0.5 best for sentence-transformers
 
     # Deduplicate based on semantic similarity
     duplicate_indices = []
@@ -91,21 +90,23 @@ def get_news_articles(query, n_articles):
     payload = {
         "query": "If you're interested in news about innovations in AI by people or companies, you need to check out this article:",
         "numResults": 10,
-        "startPublishedDate": (datetime.today() - timedelta(days=3)).strftime('%Y-%m-%dT00:00:00Z')
+        "startPublishedDate": (datetime.today() - timedelta(days=3)).strftime(
+            "%Y-%m-%dT00:00:00Z"
+        ),
     }
     headers = {
         "accept": "application/json",
         "content-type": "application/json",
-        "x-api-key": os.environ["METAPHOR_API_KEY"]
+        "x-api-key": os.environ["METAPHOR_API_KEY"],
     }
 
     response = requests.post(url, json=payload, headers=headers)
     data = response.json()
-    print('returned articles from Metaphor')
+    print("returned articles from Metaphor")
 
     print(data)
     if response.status_code == 200:
-        if 'articles' in data:
+        if "articles" in data:
             articles = data.get("articles", [])
         else:
             articles = data.get("results", [])
@@ -218,7 +219,10 @@ class Story:
 
 
 def get_completion(prompt, content, model="gpt-3.5-turbo"):
-    messages = [{"role": "system", "content": prompt}, {"role": "user", "content": content}]
+    messages = [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": content},
+    ]
     response = openai.ChatCompletion.create(
         model=model, messages=messages, temperature=0.8, max_tokens=1000
     )
@@ -262,12 +266,16 @@ def get_existing_titles():
 def b_new_story(title):
     """Check to make sure we haven't done this story already."""
     # Get index of story titles already in repo
-    existing_titles = [title.replace('_', ' ') for title in get_existing_titles()]
+    existing_titles = [title.replace("_", " ") for title in get_existing_titles()]
     # check the title for semantically similar existing titles
-    response = openai.Embedding.create(input=existing_titles, model="text-embedding-ada-002")['data']
-    embeddings = [data['embedding'] for data in response]
+    response = openai.Embedding.create(
+        input=existing_titles, model="text-embedding-ada-002"
+    )["data"]
+    embeddings = [data["embedding"] for data in response]
     # get the embedding of the title
-    title_embedding = openai.Embedding.create(input=title, model="text-embedding-ada-002")['data'][0]['embedding']
+    title_embedding = openai.Embedding.create(
+        input=title, model="text-embedding-ada-002"
+    )["data"][0]["embedding"]
     # compute cosine similarity between title & all existing titles
     similarities = cosine_similarity([title_embedding], embeddings)[0]
     # if any existing articles are too similar, return false
@@ -298,8 +306,10 @@ Image Idea: Excited Robots celebrating victory, photographic style
 
 News Headline: Global leaders fear extinction from AI, but AI not sure who they are
 Image Idea: Scared politicians searching for answers, photographic style""",
-            content=f"""News Headline: {story.title}""", model='gpt-3.5-turbo')
-        
+            content=f"""News Headline: {story.title}""",
+            model="gpt-3.5-turbo",
+        )
+
         # check the image prompt passes moderation
         if get_moderation_flag(story.image_prompt):
             print(f"Image prompt failed moderation: {story.image_prompt}")
