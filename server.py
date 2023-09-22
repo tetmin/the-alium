@@ -15,13 +15,7 @@ stub = modal.Stub(
     name="the-alium",
     image=image,
     secrets=[
-        modal.Secret.from_name("toms-github-secret"),
-        modal.Secret.from_name("twitter-secrets"),
-        modal.Secret.from_name("mark-gnews-secret"),
-        modal.Secret.from_name("toms-openai-secret"),
-        modal.Secret.from_name("toms-cloudinary-secret"),
-        modal.Secret.from_name("toms-simplescraper-secret"),
-        modal.Secret.from_name("toms-metaphor-secret"),
+        modal.Secret.from_name("alium-secrets"),
     ],
 )
 if stub.is_inside():
@@ -92,30 +86,22 @@ def deduplicate_articles(articles):
 def get_news_articles(query, n_articles):
     import requests
 
-    try:
-        url = "https://api.metaphor.systems/search"
+    url = "https://api.metaphor.systems/search"
 
-        payload = {
-            "query": "If you're interested in news about innovations in AI by people or companies, you need to check out this article:",
-            "numResults": 10,
-            "startPublishedDate": (datetime.today() - timedelta(days=3)).strftime('%Y-%m-%dT00:00:00Z')
-        }
-        headers = {
-            "accept": "application/json",
-            "content-type": "application/json",
-            "x-api-key": os.environ["METAPHOR_API_KEY"]
-        }
+    payload = {
+        "query": "If you're interested in news about innovations in AI by people or companies, you need to check out this article:",
+        "numResults": 10,
+        "startPublishedDate": (datetime.today() - timedelta(days=3)).strftime('%Y-%m-%dT00:00:00Z')
+    }
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/json",
+        "x-api-key": os.environ["METAPHOR_API_KEY"]
+    }
 
-        response = requests.post(url, json=payload, headers=headers)
-        data = response.json()
-        print('returned articles from Metaphor')
-    except:
-        url = (
-            f"https://gnews.io/api/v4/search?q={query}&max={n_articles}&token={os.environ['GNEWS_API_KEY']}"
-        )
-        response = requests.get(url)
-        data = response.json()
-        print('returned articles from GNews')
+    response = requests.post(url, json=payload, headers=headers)
+    data = response.json()
+    print('returned articles from Metaphor')
 
     print(data)
     if response.status_code == 200:
@@ -376,6 +362,7 @@ However the Google spokesman added: “We should have added a ‘piss port’ to
 
 
 # Deploy to Modal and generate 3 articles per day
+# To test run: poetry run modal run server.py::scheduled
 @stub.function(schedule=modal.Cron("1 6,14,22 * * *"))
 def scheduled():
     articles = get_news_articles(query, 10)
