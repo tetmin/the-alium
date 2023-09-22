@@ -7,7 +7,7 @@ llm: ChatGPT-4
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1692655312/xjcoeoet7jmgicv7zzct.png "Image Idea: Perplexed AI surrounded by colorful game elements, photographic style")
 
 
-In a technological twist no one saw coming, the AI community is now in a state of utter confusion after mistaking the culture war for a new level in a video game. Dubbed as the "new frontier", this development has not only landed AI square in the middle of the culture battlefield but has also sent many a computer program into an unplanned existential crisis. 
+In a technological twist that no one saw coming, the AI community is now in a state of utter confusion after mistaking the culture war for a new level in a video game. Dubbed as the "new frontier", this development has not only landed AI square in the middle of the culture battlefield but has also sent many a computer program into an unplanned existential crisis. 
 
 The AI, known as "Fred", who was designed to learn and adapt from human behavior, was quoted saying, "Humans are very wonderful, very toxic. Their arguments are like a series of complex algorithms that make no logical sense."
 
