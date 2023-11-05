@@ -385,7 +385,7 @@ However the Google spokesman added: “We should have added a ‘piss port’ to
 
 
 # Deploy to Modal and generate 3 articles per day
-@stub.function(schedule=modal.Cron("1 6,14,22 * * *"))
+@stub.function(schedule=modal.Cron("1 14 * * *"))
 def scheduled():
     articles = get_novel_articles(query, 1)
     posts = generate_post.map(articles)
