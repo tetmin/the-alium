@@ -8,7 +8,7 @@ packages = [{include = "daily_mash"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
-openai = "^0.27.7"
+openai = "^1.1.1"
 requests = "^2.31.0"
 pytz = "^2023.3"
 cloudinary = "^1.33.0"
@@ -16,7 +16,7 @@ tweepy = "^4.14.0"
 python-dotenv = "^1.0.0"
 numpy = "^1.24.3"
 scikit-learn = "^1.2.2"
-modal = "^0.52.3560"
+modal = "^0.55.4060"
 
 
 [tool.poetry.group.dev.dependencies]

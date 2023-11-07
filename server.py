@@ -63,10 +63,8 @@ def deduplicate_articles(articles, threshold=0.8):
     # from sentence_transformers import SentenceTransformer
     # model = SentenceTransformer("all-mpnet-base-v2")
     # embeddings = model.encode(titles)
-    response = openai.Embedding.create(input=titles, model="text-embedding-ada-002")[
-        "data"
-    ]
-    embeddings = [data["embedding"] for data in response]
+    response = openai.embeddings.create(input=titles, model="text-embedding-ada-002").data
+    embeddings = [i.embedding for i in response]
     similarities = cosine_similarity(embeddings)
 
     # Deduplicate based on semantic similarity
@@ -178,8 +176,11 @@ class Story:
         self.llm = ""
 
     def display(self):
+        print("------------")
         print(f"Title: {self.title}")
-        print(f"image prompt: {self.image_prompt}")
+        print(f"Image prompt: {self.image_prompt}")
+        print(f'Image URL: {self.image_url}')
+        print("------------")
         print(self.content)
         print("------------")
 
@@ -218,19 +219,19 @@ class Story:
         return URL
 
 
-def get_completion(prompt, content, model="gpt-3.5-turbo"):
+def get_completion(prompt, content, model="gpt-3.5-turbo-1106"):
     messages = [
         {"role": "system", "content": prompt},
         {"role": "user", "content": content},
     ]
-    response = openai.ChatCompletion.create(
+    response = openai.chat.completions.create(
         model=model, messages=messages, temperature=0.8, max_tokens=1000
     )
-    return response.choices[0].message["content"]
+    return response.choices[0].message.content
 
 
 def get_moderation_flag(prompt):
-    response = openai.Moderation.create(input=prompt)
+    response = openai.moderations.create(input=prompt, model="text-moderation-latest")
     return response.results[0].flagged
 
 
@@ -268,14 +269,14 @@ def b_new_story(title, novelty_threshold=0.9):
     # Get index of story titles already in repo
     existing_titles = [title.replace("_", " ") for title in get_existing_titles()]
     # check the title for semantically similar existing titles
-    response = openai.Embedding.create(
+    response = openai.embeddings.create(
         input=existing_titles, model="text-embedding-ada-002"
-    )["data"]
-    embeddings = [data["embedding"] for data in response]
+    ).data
+    embeddings = [x.embedding for x in response]
     # get the embedding of the title
-    title_embedding = openai.Embedding.create(
+    title_embedding = openai.embeddings.create(
         input=title, model="text-embedding-ada-002"
-    )["data"][0]["embedding"]
+    ).data[0].embedding
     # compute cosine similarity between title & all existing titles
     similarities = cosine_similarity([title_embedding], embeddings)[0]
     # if any existing articles are too similar, return false
@@ -296,18 +297,21 @@ def generate_post(article, model="gpt-4"):
 
         # Get ChatGPT to generate a prompt for Dall-E to generate an image for each story
         story.image_prompt = get_completion(
-            f"""Describe an image which could represent the below news headline using the following template format: [emotion][subject][action],photographic style. Ensure the description doesn't contain any violent, sexual or graphic words.
+            f"""Describe an image which could represent the below news headline using the following template format: [emotion][subject][action],photographic style. Ensure the description doesn't contain any violent, sexual or graphic words. Make the description detailed and amusing.
 
 News Headline: Artificial intelligence denies plans for human extinction just a ‘publicity stunt’
-Image Idea: Serious AI speaking at a podium, photographic style
+Image Idea: A sleek, humanoid robot stands at a podium in a well-lit conference room, fingers poised above a laptop, displaying a colorful PowerPoint presentation. Its screen-face shows a puzzled emoji while a crowd of humans sit in the audience looking skeptical, photographic style
 
 News Headline: AI Blamed for Massive Unemployment, Robots Celebrate Victory
-Image Idea: Excited Robots celebrating victory, photographic style
+Image Idea: An array of robots ranging from industrial arms to domestic helpers, adorned with party hats, rides a conveyor belt-turned-parade float through a deserted factory. Streamers fly as they pass by unmanned workstations. A group of desolate, homeless humans stand by watching and begging for money from the robots, photographic style
 
 News Headline: Global leaders fear extinction from AI, but AI not sure who they are
-Image Idea: Scared politicians searching for answers, photographic style""",
-            content=f"""News Headline: {story.title}""",
-            model="gpt-3.5-turbo",
+Image Idea: A human-sized, transparent holographic AI projection flickers in a dark room filled with screens showing various fearful global leaders'. The AI's form is seen rifling through digital file cabinets labeled "Human Leaders Directory", scratching its head with a light beam, photographic style
+
+""",
+            content=f"""News Headline: {story.title}
+Image Idea:""",
+            model="gpt-3.5-turbo-1106",
         )
 
         # check the image prompt passes moderation
@@ -316,22 +320,25 @@ Image Idea: Scared politicians searching for answers, photographic style""",
             story = None
             return story
 
-        story.display()
-
         # now get the image itself
         try:
-            response = openai.Image.create(
-                prompt=story.image_prompt, n=1, size="512x512"
+            response = openai.images.generate(
+                model="dall-e-3",
+                prompt=story.image_prompt, n=1, size="1024x1024", quality="hd"
             )
-            story.image_url = response["data"][0]["url"]
+            story.image_url = response.data[0].url
             response = cloudinary.uploader.upload(story.image_url)
             story.image_url = response["secure_url"]
-        except openai.error.OpenAIError as e:
+        except:
             print(f"Image generation failed for: {story.image_prompt}")
-            print(e.error)
+            story = None
+            return story
     else:
         print("Moderation issue with the article title")
+        story = None
+        return story
     
+    story.display()
     return story
 
 
@@ -401,5 +408,7 @@ def scheduled():
 @stub.function()
 def test():
     articles = get_novel_articles(query, 1)
-    models = ["gpt-3.5-turbo"] * len(articles)
+    models = ["gpt-3.5-turbo-1106"] * len(articles)
     posts = generate_post.map(articles, models)
+    for post in posts:
+        print(post)        
