@@ -377,10 +377,10 @@ def tweet_article(story):
     )
 
     # post a follow-up threaded tweet
-    response = client.create_tweet(
-        text=f"Reply with links to any news, tweets or headlines you'd like @alium_ai to write a satirical article about.",
-        in_reply_to_tweet_id=response.data['id'],
-    )
+    #response = client.create_tweet(
+        #text=f"Reply with links to any news, tweets or headlines you'd like @alium_ai to write a satirical article about.",
+        #in_reply_to_tweet_id=response.data['id'],
+    #)
 
 
 def get_novel_articles(query, n_articles_to_generate, n_articles_to_analyse=10):
