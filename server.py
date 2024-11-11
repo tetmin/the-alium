@@ -16,7 +16,8 @@ app = modal.App(
         modal.Secret.from_name("alium-secrets"),
     ],
 )
-with image.imports():
+
+if not modal.is_local():
     import openai
     import cloudinary.uploader
     import tweepy
