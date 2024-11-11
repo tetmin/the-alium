@@ -9,13 +9,14 @@ from functools import partial
 
 # Setup the Modal Labs image
 image = modal.Image.debian_slim().poetry_install_from_file("pyproject.toml")
-stub = modal.App(
+app = modal.App(
     name="the-alium",
     image=image,
     secrets=[
         modal.Secret.from_name("alium-secrets"),
     ],
 )
+
 if not modal.is_local():
     import openai
     import cloudinary.uploader
@@ -219,7 +220,7 @@ class Story:
         return URL
 
 
-def get_completion(prompt, content, model="gpt-3.5-turbo-1106"):
+def get_completion(prompt, content, model="gpt-4o-mini"):
     messages = [
         {"role": "system", "content": prompt},
         {"role": "user", "content": content},
@@ -283,8 +284,8 @@ def b_new_story(title, novelty_threshold=0.9):
     return not any(similarities > novelty_threshold)
 
 
-@stub.function()
-def generate_post(article, model="gpt-4"):
+@app.function()
+def generate_post(article, model="gpt-4o"):
     # Call ChatGPT to generate the stories
     title = article.get("title")
     story = None
@@ -293,7 +294,7 @@ def generate_post(article, model="gpt-4"):
         new_story = get_completion(prompt, title, model=model)
         new_title, content = split_string(new_story)
         story = Story(article, new_title, content)
-        story.llm = "ChatGPT-4"
+        story.llm = "GPT-4o"
 
         # Get ChatGPT to generate a prompt for Dall-E to generate an image for each story
         story.image_prompt = get_completion(
@@ -311,7 +312,7 @@ Image Idea: A human-sized, transparent holographic AI projection flickers in a d
 """,
             content=f"""News Headline: {story.title}
 Image Idea:""",
-            model="gpt-3.5-turbo-1106",
+            model="gpt-4o-mini",
         )
 
         # check the image prompt passes moderation
@@ -420,7 +421,7 @@ However the Google spokesman added: “We should have added a ‘piss port’ to
 
 
 # Deploy to Modal and generate 1 article per day
-@stub.function(schedule=modal.Cron("1 14 * * *"))
+@app.function(schedule=modal.Cron("1 14 * * *"))
 def scheduled():
     articles = get_novel_articles(query, 1)
     posts = generate_post.map(articles)
@@ -433,10 +434,10 @@ def scheduled():
 
 
 # To test run - poetry run modal run server.py::test
-@stub.function()
+@app.function()
 def test():
     articles = get_novel_articles(query, 1)
-    models = ["gpt-3.5-turbo-1106"] * len(articles)
+    models = ["gpt-4o-mini"] * len(articles)
     posts = generate_post.map(articles, models)
     for post in posts:
         if post is not None:

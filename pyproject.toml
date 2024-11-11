@@ -1,14 +1,14 @@
 [tool.poetry]
-name = "daily-mash"
+name = "the-alium"
 version = "0.1.0"
 description = "Generate satirical AI news with AI"
 authors = ["Your Name <you@example.com>"]
 readme = "README.md"
-packages = [{include = "daily_mash"}]
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.9"
-openai = "^1.1.1"
+openai = "^1.54.3"
 requests = "^2.31.0"
 pytz = "^2023.3"
 cloudinary = "^1.33.0"
@@ -16,7 +16,7 @@ tweepy = "^4.14.0"
 python-dotenv = "^1.0.0"
 numpy = "^1.24.3"
 scikit-learn = "^1.2.2"
-modal = "^0.55.4060"
+modal = "^0.65.48"
 
 
 [tool.poetry.group.dev.dependencies]
