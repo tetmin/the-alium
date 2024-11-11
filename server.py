@@ -16,7 +16,7 @@ stub = modal.App(
         modal.Secret.from_name("alium-secrets"),
     ],
 )
-if modal.is_local():
+if not modal.is_local():
     import openai
     import cloudinary.uploader
     import tweepy
