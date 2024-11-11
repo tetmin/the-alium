@@ -9,14 +9,14 @@ from functools import partial
 
 # Setup the Modal Labs image
 image = modal.Image.debian_slim().poetry_install_from_file("pyproject.toml")
-stub = modal.Stub(
+stub = modal.App(
     name="the-alium",
     image=image,
     secrets=[
         modal.Secret.from_name("alium-secrets"),
     ],
 )
-if stub.is_inside():
+if not modal.is_local():
     import openai
     import cloudinary.uploader
     import tweepy
