@@ -17,6 +17,7 @@ python-dotenv = "^1.0.0"
 numpy = "^1.24.3"
 scikit-learn = "^1.2.2"
 modal = "^0.65.48"
+litellm = "^1.53.1"
 
 
 [tool.poetry.group.dev.dependencies]

@@ -7,12 +7,15 @@ from datetime import datetime, timedelta
 import cloudinary.uploader
 import modal
 import numpy as np
-import openai
 import pytz
 import requests
 import tweepy
 from pydantic import BaseModel, HttpUrl
 from sklearn.metrics.pairwise import cosine_similarity
+import litellm
+
+litellm.set_verbose = True  # For debugging
+litellm.success_callback = ["athina"]  # For monitoring
 
 # Initialize Modal Labs app for serverless deployment
 image = modal.Image.debian_slim().poetry_install_from_file("pyproject.toml")
@@ -63,9 +66,7 @@ class JekyllPublisher:
         self.owner = "tetmin"
         self.repo = "the-alium"
         self.token = os.environ["GITHUB_TOKEN"]
-        self.base_url = (
-            f"https://api.github.com/repos/{self.owner}/{self.repo}/contents"
-        )
+        self.base_url = f"https://api.github.com/repos/{self.owner}/{self.repo}/contents"
         self.headers = {
             "Authorization": f"token {self.token}",
             "Accept": "application/vnd.github.v3+json",
@@ -100,15 +101,15 @@ class JekyllPublisher:
             f"\n\n---\n*AInspired by: [{story.original_article.title}]({story.original_article.url})*"  # modified
         )
 
-    def get_existing_story_titles(self):
+    def get_existing_article_titles(self):
         response = requests.get(f"{self.base_url}/_posts", timeout=10)
         if response.status_code == 200:
             data = json.loads(response.text)
             return [file["name"] for file in data]
         return []
 
-    def get_recent_story_titles(self, months_ago=3):
-        all_titles = self.get_existing_story_titles()
+    def get_recent_article_titles(self, months_ago=3):
+        all_titles = self.get_existing_article_titles()
         cutoff_date = datetime.now() - timedelta(days=months_ago * 30)
         filtered_titles = []
         for title_with_date in all_titles:
@@ -154,9 +155,7 @@ class TwitterPublisher:
             access_token=os.environ["TWITTER_ACCESS_TOKEN"],
             access_token_secret=os.environ["TWITTER_ACCESS_TOKEN_SECRET"],
         )
-        auth = tweepy.OAuthHandler(
-            os.environ["TWITTER_API_KEY"], os.environ["TWITTER_API_SECRET"]
-        )
+        auth = tweepy.OAuthHandler(os.environ["TWITTER_API_KEY"], os.environ["TWITTER_API_SECRET"])
         auth.set_access_token(
             os.environ["TWITTER_ACCESS_TOKEN"],
             os.environ["TWITTER_ACCESS_TOKEN_SECRET"],
@@ -175,9 +174,7 @@ class TwitterPublisher:
         post_url = story.blog_url[:-3].replace("-", "/")
         post_url = f"https://www.thealium.com/{post_url}.html"
         text = f"{story.title}\n\n{post_url}?nolongurl"
-        return self.client.create_tweet(
-            text=text, media_ids=[media_id] if media_id else None
-        )
+        return self.client.create_tweet(text=text, media_ids=[media_id] if media_id else None)
 
 
 # Handles publishing stories across multiple platforms, currently via GitHub Pages (for Jekyll) and Twitter
@@ -213,17 +210,13 @@ class NewsSource:
         payload = {
             "query": f"If you're interested in news about innovations in {self.query} by people or companies, you need to check out this article:",
             "numResults": 100,
-            "startPublishedDate": (datetime.today() - timedelta(days=3)).strftime(
-                "%Y-%m-%dT00:00:00Z"
-            ),
+            "startPublishedDate": (datetime.today() - timedelta(days=3)).strftime("%Y-%m-%dT00:00:00Z"),
         }
         response = requests.post(url, json=payload, headers=self.headers, timeout=10)
         if response.status_code == 200:
             data = response.json()
             raw_articles = data.get("articles", data.get("results", []))
-            articles = [
-                Article.from_metaphor(article_data) for article_data in raw_articles
-            ][:n_articles]
+            articles = [Article.from_metaphor(article_data) for article_data in raw_articles][:n_articles]
             return articles
         return []
 
@@ -244,14 +237,10 @@ class NewsSource:
         similarities = cosine_similarity(article_embeddings, existing_embeddings)
         max_similarities = np.max(similarities, axis=1)
 
-        sorted_indices = np.argsort(
-            max_similarities
-        )  # ascending order (least similar first)
-        novel_articles = [
-            articles[i]
-            for i in sorted_indices
-            if max_similarities[i] <= similarity_threshold
-        ][:n_articles]
+        sorted_indices = np.argsort(max_similarities)  # ascending order (least similar first)
+        novel_articles = [articles[i] for i in sorted_indices if max_similarities[i] <= similarity_threshold][
+            :n_articles
+        ]
         return novel_articles
 
 
@@ -272,12 +261,8 @@ class Article(BaseModel):
     @staticmethod
     def get_embeddings(texts):
         """Utility function to batch embed input texts for similarity comparisons"""
-        return [
-            item.embedding
-            for item in openai.embeddings.create(
-                input=texts, model="text-embedding-ada-002"
-            ).data
-        ]
+        response = litellm.embedding(model="text-embedding-ada-002", input=texts)
+        return [item["embedding"] for item in response.data]
 
 
 # Data structure for holding & displaying generated satirical story content
@@ -306,62 +291,53 @@ URL: {self.original_article.url}"""
 # Edits articles into stories
 class StoryEditor:
     def __init__(self):
-        self.openai = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        pass
 
-    def generate_story(self, article, model="gpt-4o", image_provider="together"):
+    def generate_story(self, article, model="gpt-4o-mini", image_quality="standard"):
+        # Check for article title moderation issues & edit into a story
         if self._get_moderation_flag(article.title):
-            print(
-                f"Moderation issue with the LLM proposed story title: {article.title}"
-            )
+            print(f"Moderation issue with the LLM proposed story title: {article.title}")
             return None
-
-        # Write the story
-        story_content = self._get_completion(STORY_PROMPT, article.title, model=model)
-        title, content = self._parse_completion(story_content)
+        messages = [
+            {"role": "system", "content": STORY_PROMPT},
+            {"role": "user", "content": article.title},
+        ]
+        response = litellm.completion(model=model, messages=messages, temperature=0.8, max_tokens=1000)
+        title, content = self._parse_story_completion(response.choices[0].message.content)
         story = Story(original_article=article, title=title, content=content, llm=model)
 
-        # Write the image prompt
-        image_prompt = self._get_completion(
-            IMAGE_PROMPT_TEMPLATE,
-            f"News Headline: {story.title}\nImage Idea:",
-            model="gpt-4o-mini",
-        )
+        # Write the image prompt & check for moderation issues
+        messages = [
+            {"role": "system", "content": IMAGE_PROMPT_TEMPLATE},
+            {"role": "user", "content": f"News Headline: {story.title}\nImage Idea:"},
+        ]
+        response = litellm.completion(model="gpt-4o-mini", messages=messages, temperature=0.8)
+        image_prompt = response.choices[0].message.content
         if self._get_moderation_flag(image_prompt):
             print(f"Image prompt failed moderation: {image_prompt}")
             return None
         story.image_prompt = image_prompt
 
         # Generate the image
-        story.image_url = self._generate_image(image_prompt)
+        response = litellm.image_generation(
+            prompt=image_prompt,
+            model="dall-e-3",
+            n=1,
+            size="1024x1024",
+            quality=image_quality,
+        )
+        story.image_url = cloudinary.uploader.upload(response.data[0].url)["secure_url"]
         return story
 
-    def _get_completion(self, prompt, content, model="gpt-4o-mini"):
-        messages = [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": content},
-        ]
-        response = openai.chat.completions.create(
-            model=model, messages=messages, temperature=0.8, max_tokens=1000
-        )
-        return response.choices[0].message.content
-
-    def _parse_completion(self, completion):
-        lines = completion.split("\n", 1)
+    def _parse_story_completion(self, response):
+        lines = response.split("\n", 1)
         title = re.sub(r"^#+\s*|\*\*|\*\s*", "", lines[0])
         content = lines[1] if len(lines) > 1 else ""
         return title, content
 
     def _get_moderation_flag(self, prompt):
-        response = openai.moderations.create(
-            input=prompt, model="text-moderation-latest"
-        )
+        response = litellm.moderation(input=prompt, model="text-moderation-latest")
         return response.results[0].flagged
-
-    def _generate_image(self, prompt):
-        response = openai.images.generate(
-            model="dall-e-3", prompt=prompt, n=1, size="1024x1024", quality="hd"
-        )
-        return cloudinary.uploader.upload(response.data[0].url)["secure_url"]
 
 
 # Specify the query filter for source articles (e.g., "artificial intelligence")
@@ -371,14 +347,16 @@ publisher = MultiPublisher()
 
 
 # Main function to generate and publish satirical stories
-@app.function(schedule=modal.Cron("1 14 * * *"))
-def generate_and_publish_stories(test_mode: bool = False):
-    # Log mode and fetch titles of existing stories written
+def _generate_and_publish_stories(test_mode: bool = False):
     print("Running in test mode" if test_mode else "Running in production mode")
-    print("Getting existing titles from past 3 months...")
-    existing_titles = publisher.golden_source.get_recent_story_titles(months_ago=3)
+    model = "gpt-4o-mini" if test_mode else "gpt-4o"  # Use smaller model in test mode
+    image_quality = "standard" if test_mode else "hd"
 
-    # Fetch and filter new news articles based on similarity to existing stories
+    # Fetch titles of the articles recently edited into stories
+    print("Getting existing titles from past 3 months...")
+    existing_titles = publisher.golden_source.get_recent_article_titles(months_ago=3)
+
+    # Fetch and filter new news articles based on similarity to existing articles
     print(f"Fetching novel articles about '{source.query}'...")
     similarity_threshold = 0.95 if test_mode else 0.9  # Higher threshold in test mode
     articles = source.get_novel_articles(1, existing_titles, similarity_threshold)
@@ -387,10 +365,7 @@ def generate_and_publish_stories(test_mode: bool = False):
     # Edit each article into a satirical story
     for i, article in enumerate(articles, 1):
         print(f"Generating satirical story {i} of {len(articles)}...")
-        model = (
-            "gpt-4o-mini" if test_mode else "gpt-4o"
-        )  # Use smaller model in test mode
-        story = editor.generate_story(article, model=model)
+        story = editor.generate_story(article, model=model, image_quality=image_quality)
         print(story)
 
         # Publish if not in test mode and story generation succeeded
@@ -399,9 +374,19 @@ def generate_and_publish_stories(test_mode: bool = False):
             publisher.publish_story(story)
 
 
-# To test in local modal container without publishing: modal run server.py
-# To publish manually: modal run server.py::generate_and_publish_stories
+# To test fully locally (no modal): poetry run python server.py
+# To test in a remote modal container: modal run server.py
+# To publish stories manually: modal run server.py::generate_and_publish_stories
 # To deploy on the schedule: modal deploy server.py
+@app.function(schedule=modal.Cron("1 14 * * *"))
+def generate_and_publish_stories(test_mode: bool = False):
+    _generate_and_publish_stories(test_mode)
+
+
 @app.local_entrypoint()
 def main():
     generate_and_publish_stories.remote(test_mode=True)
+
+
+if __name__ == "__main__":
+    _generate_and_publish_stories(test_mode=True)
