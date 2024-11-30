@@ -14,6 +14,7 @@ import requests
 import tweepy
 from pydantic import BaseModel, HttpUrl
 from sklearn.metrics.pairwise import cosine_similarity
+from together import Together
 
 litellm.success_callback = ["athina"]  # For monitoring
 
@@ -302,7 +303,9 @@ class StoryEditor:
             {"role": "system", "content": STORY_PROMPT},
             {"role": "user", "content": article.title},
         ]
-        response = litellm.completion(model=model, messages=messages, temperature=0.8, max_tokens=1000, metadata=metadata)
+        response = litellm.completion(
+            model=model, messages=messages, temperature=0.8, max_tokens=1000, metadata=metadata
+        )
         title, content = self._parse_story_completion(response.choices[0].message.content)
         story = Story(original_article=article, title=title, content=content, llm=model)
 
@@ -319,15 +322,31 @@ class StoryEditor:
         story.image_prompt = image_prompt
 
         # Generate the image
-        response = litellm.image_generation(
-            prompt=image_prompt,
-            model="dall-e-3",
-            n=1,
-            size="1024x1024",
-            quality=image_quality,
-            metadata=metadata,
-        )
-        story.image_url = cloudinary.uploader.upload(response.data[0].url)["secure_url"]
+        image_provider = "together"  # Temporary since it's free for a while
+        if image_provider == "together":
+            together_client = Together(api_key=os.environ["TOGETHER_API_KEY"])
+            response = together_client.images.generate(
+                prompt=image_prompt,
+                model="black-forest-labs/FLUX.1-schnell-Free",
+                width=1024,
+                height=1024,
+                steps=4,
+                n=1,
+                response_format="b64_json",
+            )
+            # Convert base64 to URL by uploading to Cloudinary
+            image_data = base64.b64decode(response.data[0].b64_json)
+            story.image_url = cloudinary.uploader.upload(image_data)["secure_url"]
+        else:
+            response = litellm.image_generation(
+                prompt=image_prompt,
+                model="dall-e-3",
+                n=1,
+                size="1024x1024",
+                quality=image_quality,
+                metadata=metadata,
+            )
+            story.image_url = cloudinary.uploader.upload(response.data[0].url)["secure_url"]
         return story
 
     def _parse_story_completion(self, response):
