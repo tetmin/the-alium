@@ -59,6 +59,8 @@ Image Idea: A human-sized, transparent holographic AI projection flickers in a d
 
 Important: You will respond only with the image idea, nothing else.
 """
+REFLECTION_PROMPT = """As a discerning editor, reflect on the story you wrote in line with the original objectives, consider how it could be made funnier & whether anything warrants removal."""
+EDITING_PROMPT = """Use your reflection to improve the original story draft ready for publication."""
 
 
 # Handles GitHub repository operations (posting story markdown files and checking existing content)
@@ -294,7 +296,7 @@ class StoryEditor:
     def __init__(self):
         pass
 
-    def generate_story(self, article, model="gpt-4o-mini", image_quality="standard", metadata=None):
+    def generate_story(self, article, model="gpt-4o-mini", image_quality="standard", metadata=None, reflection=False):
         # Check for article title moderation issues & edit into a story
         if self._get_moderation_flag(article.title):
             print(f"Moderation issue with the LLM proposed story title: {article.title}")
@@ -303,9 +305,27 @@ class StoryEditor:
             {"role": "system", "content": STORY_PROMPT},
             {"role": "user", "content": article.title},
         ]
-        response = litellm.completion(
-            model=model, messages=messages, temperature=0.8, max_tokens=1000, metadata=metadata
-        )
+        response = litellm.completion(model=model, messages=messages, temperature=1.2, metadata=metadata)
+
+        if reflection:
+            # Reflect on the story
+            messages.extend(
+                [
+                    {"role": "assistant", "content": response.choices[0].message.content},
+                    {"role": "user", "content": REFLECTION_PROMPT},
+                ]
+            )
+            response = litellm.completion(model=model, messages=messages, temperature=0.8, metadata=metadata)
+
+            # Improve the story based on the reflection
+            messages.extend(
+                [
+                    {"role": "assistant", "content": response.choices[0].message.content},
+                    {"role": "user", "content": EDITING_PROMPT},
+                ]
+            )
+            response = litellm.completion(model=model, messages=messages, temperature=0.8, metadata=metadata)
+
         title, content = self._parse_story_completion(response.choices[0].message.content)
         story = Story(original_article=article, title=title, content=content, llm=model)
 
@@ -370,7 +390,7 @@ publisher = MultiPublisher()
 def _generate_and_publish_stories(test_mode: bool = False):
     # Set up logging & cheaper test mode models
     print("Running in test mode" if test_mode else "Running in production mode")
-    model = "gpt-4o-mini" if test_mode else "gpt-4o"  # Use smaller model in test mode
+    model = "gpt-4o-mini" if test_mode else "gpt-4o-2024-11-20"  # Use smaller model in test mode
     image_quality = "standard" if test_mode else "hd"
     litellm.set_verbose = True if test_mode else False  # For debugging
     metadata = {
@@ -391,7 +411,7 @@ def _generate_and_publish_stories(test_mode: bool = False):
     # Edit each article into a satirical story
     for i, article in enumerate(articles, 1):
         print(f"Generating satirical story {i} of {len(articles)}...")
-        story = editor.generate_story(article, model, image_quality, metadata)
+        story = editor.generate_story(article, model, image_quality, metadata, reflection=True)
         print(story)
 
         # Publish if not in test mode and story generation succeeded
