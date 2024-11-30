@@ -2,9 +2,11 @@ import base64
 import json
 import os
 import re
+import uuid
 from datetime import datetime, timedelta
 
 import cloudinary.uploader
+import litellm
 import modal
 import numpy as np
 import pytz
@@ -12,9 +14,7 @@ import requests
 import tweepy
 from pydantic import BaseModel, HttpUrl
 from sklearn.metrics.pairwise import cosine_similarity
-import litellm
 
-litellm.set_verbose = True  # For debugging
 litellm.success_callback = ["athina"]  # For monitoring
 
 # Initialize Modal Labs app for serverless deployment
@@ -293,7 +293,7 @@ class StoryEditor:
     def __init__(self):
         pass
 
-    def generate_story(self, article, model="gpt-4o-mini", image_quality="standard"):
+    def generate_story(self, article, model="gpt-4o-mini", image_quality="standard", metadata=None):
         # Check for article title moderation issues & edit into a story
         if self._get_moderation_flag(article.title):
             print(f"Moderation issue with the LLM proposed story title: {article.title}")
@@ -302,7 +302,7 @@ class StoryEditor:
             {"role": "system", "content": STORY_PROMPT},
             {"role": "user", "content": article.title},
         ]
-        response = litellm.completion(model=model, messages=messages, temperature=0.8, max_tokens=1000)
+        response = litellm.completion(model=model, messages=messages, temperature=0.8, max_tokens=1000, metadata=metadata)
         title, content = self._parse_story_completion(response.choices[0].message.content)
         story = Story(original_article=article, title=title, content=content, llm=model)
 
@@ -311,7 +311,7 @@ class StoryEditor:
             {"role": "system", "content": IMAGE_PROMPT_TEMPLATE},
             {"role": "user", "content": f"News Headline: {story.title}\nImage Idea:"},
         ]
-        response = litellm.completion(model="gpt-4o-mini", messages=messages, temperature=0.8)
+        response = litellm.completion(model="gpt-4o-mini", messages=messages, temperature=0.8, metadata=metadata)
         image_prompt = response.choices[0].message.content
         if self._get_moderation_flag(image_prompt):
             print(f"Image prompt failed moderation: {image_prompt}")
@@ -325,6 +325,7 @@ class StoryEditor:
             n=1,
             size="1024x1024",
             quality=image_quality,
+            metadata=metadata,
         )
         story.image_url = cloudinary.uploader.upload(response.data[0].url)["secure_url"]
         return story
@@ -348,9 +349,15 @@ publisher = MultiPublisher()
 
 # Main function to generate and publish satirical stories
 def _generate_and_publish_stories(test_mode: bool = False):
+    # Set up logging & cheaper test mode models
     print("Running in test mode" if test_mode else "Running in production mode")
     model = "gpt-4o-mini" if test_mode else "gpt-4o"  # Use smaller model in test mode
     image_quality = "standard" if test_mode else "hd"
+    litellm.set_verbose = True if test_mode else False  # For debugging
+    metadata = {
+        "environment": "development" if test_mode else "production",
+        "session_id": os.environ["MODAL_TASK_ID"] if not modal.is_local() else uuid.uuid4(),
+    }
 
     # Fetch titles of the articles recently edited into stories
     print("Getting existing titles from past 3 months...")
@@ -365,7 +372,7 @@ def _generate_and_publish_stories(test_mode: bool = False):
     # Edit each article into a satirical story
     for i, article in enumerate(articles, 1):
         print(f"Generating satirical story {i} of {len(articles)}...")
-        story = editor.generate_story(article, model=model, image_quality=image_quality)
+        story = editor.generate_story(article, model, image_quality, metadata)
         print(story)
 
         # Publish if not in test mode and story generation succeeded
