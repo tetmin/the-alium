@@ -1,13 +1,15 @@
 import base64
+import functools
 import json
 import os
+import pickle
 import re
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-import dotenv
 
 import cloudinary.uploader
+import dotenv
 import litellm
 import modal
 import numpy as np
@@ -27,12 +29,58 @@ app = modal.App(
     name="the-alium",
     image=image,
     secrets=[modal.Secret.from_name("alium-secrets")],
-    mounts=[modal.Mount.from_local_dir("prompts", remote_path="/root/prompts")],
+    mounts=[
+        modal.Mount.from_local_dir("prompts", remote_path="/root/prompts"),
+        modal.Mount.from_local_dir(".cache", remote_path="/root/.cache"),
+    ],
 )
 
+# Global config
+METAPHOR_QUERY = "artificial intelligence"
 
-# Handles GitHub repository operations (posting story markdown files and checking existing content)
+
+def cache_responses(cache_file):
+    """Decorator to cache API responses in test mode"""
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if not hasattr(self, "_test_mode") or not self._test_mode:
+                return func(self, *args, **kwargs)
+
+            cache_path = Path(cache_file)
+            # Load cache
+            if cache_path.exists():
+                try:
+                    with cache_path.open("rb") as f:
+                        cache = pickle.load(f)
+                        if datetime.now() - cache["timestamp"] < timedelta(days=365):
+                            return cache["data"]
+                except Exception as e:
+                    print(f"Cache read error: {e}")
+                    cache = {"timestamp": datetime.now(), "data": []}
+
+            # Get fresh data
+            data = func(self, *args, **kwargs)
+
+            # Save to cache
+            try:
+                cache_path.parent.mkdir(exist_ok=True)
+                with cache_path.open("wb") as f:
+                    pickle.dump({"timestamp": datetime.now(), "data": data}, f)
+            except Exception as e:
+                print(f"Cache write error: {e}")
+
+            return data
+
+        return wrapper
+
+    return decorator
+
+
 class JekyllPublisher:
+    """Handles GitHub repository operations (posting story markdown files and checking existing content)"""
+
     def __init__(self):
         self.owner = "tetmin"
         self.repo = "the-alium"
@@ -69,7 +117,7 @@ class JekyllPublisher:
         return (
             f'---\ntitle: "{story.title}"\ndate: {self._get_datetime_for_frontmatter()}\nimage: {story.image_url}\nllm: {story.llm}\n---\n'
             f'![Alt Text]({story.image_url} "{story.image_prompt}")\n\n{story.content}'
-            f"\n\n---\n*AInspired by: [{story.original_article.title}]({story.original_article.url})*"  # modified
+            f"\n\n---\n*AInspired by: [{story.original_article.title}]({story.original_article.url})*"
         )
 
     def get_existing_article_titles(self):
@@ -117,8 +165,9 @@ class JekyllPublisher:
         return f"{self._get_date_for_filename()}-{self._clean_filename(story.original_article.title)}.md"
 
 
-# Manages Twitter API interactions for posting stories
 class TwitterPublisher:
+    """Manages Twitter API interactions for posting stories"""
+
     def __init__(self):
         self.client = tweepy.Client(
             consumer_key=os.environ["TWITTER_API_KEY"],
@@ -141,15 +190,29 @@ class TwitterPublisher:
         return response.media_id_string
 
     def publish(self, story):
+        # Always post to main account first
         media_id = self.upload_media(story.image_url)
         post_url = story.blog_url[:-3].replace("-", "/")
         post_url = f"https://www.thealium.com/{post_url}.html"
         text = f"{story.title}\n\n{post_url}?nolongurl"
-        return self.client.create_tweet(text=text, media_ids=[media_id] if media_id else None)
+        response = self.client.create_tweet(text=text, media_ids=[media_id] if media_id else None)
+
+        # If story was sourced from Twitter, reply to original thread with our tweet
+        if story.original_article.data.get("source") == "twitter_mention":
+            tweet_id = story.original_article.data.get("tweet_id")
+            if tweet_id:
+                self.client.create_tweet(
+                    text="Here's your AI-generated satirical story!",
+                    in_reply_to_tweet_id=tweet_id,
+                    quote_tweet_id=response.data["id"],
+                )
+
+        return response
 
 
-# Handles publishing stories across multiple platforms, currently via GitHub Pages (for Jekyll) and Twitter
 class MultiPublisher:
+    """Handles publishing stories across multiple platforms"""
+
     def __init__(self):
         self.publishers = [JekyllPublisher(), TwitterPublisher()]
 
@@ -161,35 +224,11 @@ class MultiPublisher:
         return next(p for p in self.publishers if isinstance(p, JekyllPublisher))
 
 
-# Sources articles from news sources (currently only Metaphor implemented)
 class NewsSource:
-    """
-    Fetches recent AI news articles from Metaphor API. Implements get_articles and returns a list of Article instances.
-    """
-
-    def __init__(self, search_query):
-        self.query = search_query
-        self.api_key = os.environ["METAPHOR_API_KEY"]
-        self.headers = {
-            "accept": "application/json",
-            "content-type": "application/json",
-            "x-api-key": self.api_key,
-        }
+    """Base class for news sources. Implements get_articles and returns a list of Article instances."""
 
     def get_articles(self, n_articles):
-        url = "https://api.metaphor.systems/search"
-        payload = {
-            "query": f"If you're interested in news about innovations in {self.query} by people or companies, you need to check out this article:",
-            "numResults": 100,
-            "startPublishedDate": (datetime.today() - timedelta(days=3)).strftime("%Y-%m-%dT00:00:00Z"),
-        }
-        response = requests.post(url, json=payload, headers=self.headers, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            raw_articles = data.get("articles", data.get("results", []))
-            articles = [Article.from_metaphor(article_data) for article_data in raw_articles][:n_articles]
-            return articles
-        return []
+        raise NotImplementedError
 
     def get_novel_articles(self, n_articles, existing_titles, similarity_threshold=0.9):
         articles = self.get_articles(n_articles * 10)
@@ -213,6 +252,133 @@ class NewsSource:
             :n_articles
         ]
         return novel_articles
+
+
+class MetaphorSource(NewsSource):
+    def __init__(self, query, test_mode: bool = False):
+        self._test_mode = test_mode
+        self.query = query
+        self.api_key = os.environ["METAPHOR_API_KEY"]
+        self.headers = {
+            "accept": "application/json",
+            "content-type": "application/json",
+            "x-api-key": self.api_key,
+        }
+
+    @cache_responses(".cache/metaphor.pkl")
+    def get_articles(self, n_articles):
+        url = "https://api.metaphor.systems/search"
+        payload = {
+            "query": f"If you're interested in news about innovations in {self.query} by people or companies, you need to check out this article:",
+            "numResults": 100,
+            "startPublishedDate": (datetime.today() - timedelta(days=3)).strftime("%Y-%m-%dT00:00:00Z"),
+        }
+        response = requests.post(url, json=payload, headers=self.headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            raw_articles = data.get("articles", data.get("results", []))
+            articles = [Article.from_metaphor(article_data) for article_data in raw_articles][:n_articles]
+            return articles
+        return []
+
+
+class TwitterTrendsSource(NewsSource):
+    """Sources articles from personalised trends of an X Premium user"""
+
+    def __init__(self, min_posts: int = 10000, test_mode: bool = False):
+        self._test_mode = test_mode
+        self.min_posts = min_posts
+        self.client = tweepy.Client(
+            consumer_key=os.environ["TWITTER_API_KEY"],
+            consumer_secret=os.environ["TWITTER_API_SECRET"],
+            access_token=os.environ["X_PREMIUM_ACCESS_TOKEN"],
+            access_token_secret=os.environ["X_PREMIUM_ACCESS_TOKEN_SECRET"],
+        )
+
+    def _parse_post_count(self, count_str: str) -> float:
+        """Convert strings like '32K' or '1.9B' to numbers"""
+        multipliers = {"K": 1000, "M": 1000000, "B": 1000000000}
+        count_str = count_str.strip().upper()
+
+        if count_str[-1] in multipliers:
+            number = float(count_str[:-1])
+            return number * multipliers[count_str[-1]]
+        return float(count_str)
+
+    @cache_responses(".cache/twitter_trends.pkl")
+    def get_articles(self, n_articles):
+        response = self.client._make_request("GET", "/2/users/personalized_trends", user_auth=True)
+
+        if not response.data:
+            return []
+
+        # Parse and sort trends by post_count
+        articles = []
+        for trend in response.data:
+            post_count = self._parse_post_count(trend["post_count"])
+            if post_count >= self.min_posts:  # Filter out low-engagement trends
+                articles.append(
+                    (
+                        post_count,
+                        Article(
+                            title=trend["trend_name"],
+                            url=f"https://twitter.com/search?q={trend['trend_name']}",
+                            data={
+                                "post_count": post_count,
+                                "category": trend.get("category"),
+                                "source": "twitter_trend",
+                            },
+                        ),
+                    )
+                )
+
+        # Sort by post_count and return just the Article objects
+        return [article for _, article in sorted(articles, reverse=True)][:n_articles]
+
+
+# Sources articles from Twitter mentions
+class TwitterMentionsSource(NewsSource):
+    """Sources articles from Twitter mentions of the bot - uses too many monthly tweet requests"""
+
+    def __init__(self, test_mode: bool = False):
+        self._test_mode = test_mode
+        # Once get it working, use the bearer token here instead of OAuth
+        self.client = None
+
+    @cache_responses(".cache/twitter_mentions.pkl")
+    def get_articles(self, n_articles):
+        # Get mentions since last check
+        mentions = self.client.get_users_mentions(
+            1663646123674812418,
+            max_results=100,
+            expansions=["referenced_tweets.id"],
+            tweet_fields=["created_at", "text", "author_id", "conversation_id", "referenced_tweets"],
+        )
+
+        articles = []
+        # Convert mentions to Article objects
+        for tweet in mentions["data"] or []:
+            parent_tweet = (
+                next((ref for ref in mentions.includes["tweets"] if ref.id == tweet.conversation_id), None)
+                if mentions.includes and "tweets" in mentions.includes
+                else None
+            )
+
+            title = parent_tweet.text if parent_tweet else tweet.text
+            articles.append(
+                Article(
+                    title=title,
+                    url=f"https://twitter.com/user/status/{tweet.conversation_id or tweet.id}",
+                    data={
+                        "tweet_id": tweet.id,
+                        "conversation_id": tweet.conversation_id,
+                        "author_id": tweet.author_id,
+                        "source": "twitter_mention",
+                    },
+                )
+            )
+
+        return articles[:n_articles]
 
 
 # Data structure for holding articles sourced from news sources
@@ -259,8 +425,9 @@ Source: {self.original_article.title}
 URL: {self.original_article.url}"""
 
 
-# Edits articles into stories
 class StoryEditor:
+    """Edits articles into stories"""
+
     def __init__(self):
         pass
 
@@ -367,19 +534,13 @@ class StoryEditor:
         return response.results[0].flagged
 
 
-# Specify the query filter for source articles (e.g., "artificial intelligence")
-source = NewsSource("artificial intelligence")
-editor = StoryEditor()
-publisher = MultiPublisher()
-
-
 # Main function to generate and publish satirical stories
 def _generate_and_publish_stories(test_mode: bool = False):
     # Set up logging & cheaper test mode models
     print("Running in test mode" if test_mode else "Running in production mode")
     model = (
         "claude-3-5-haiku-20241022" if test_mode else "claude-3-5-sonnet-20241022"
-    )  # Use smaller model in test mode anthropic/claude-3-5-sonnet-latest | claude-3-5-sonnet-20241022 | claude-3-5-haiku-20241022
+    )  # Use smaller model in test mode
     image_quality = "standard" if test_mode else "hd"
     litellm.set_verbose = True if test_mode else False  # For debugging
     metadata = {
@@ -389,17 +550,37 @@ def _generate_and_publish_stories(test_mode: bool = False):
 
     # Fetch titles of the articles recently edited into stories
     print("Getting existing titles from past 3 months...")
+    publisher = MultiPublisher()
     existing_titles = publisher.golden_source.get_recent_article_titles(months_ago=3)
 
-    # Fetch and filter new news articles based on similarity to existing articles
-    print(f"Fetching novel articles about '{source.query}'...")
+    # Set similarity threshold
     similarity_threshold = 0.95 if test_mode else 0.9  # Higher threshold in test mode
-    articles = source.get_novel_articles(1, existing_titles, similarity_threshold)
-    print(f"Found {len(articles)} novel articles")
+    articles = []
+
+    # First check Twitter mentions
+    # TODO: Enable once figure out how to do within free tier
+    #print("Checking for Twitter mentions...")
+    #mentions_source = TwitterMentionsSource(test_mode=test_mode)
+    #articles = mentions_source.get_novel_articles(1, existing_titles, similarity_threshold)
+
+    # If no Twitter mentions, check Twitter trends
+    if not articles:
+        print("Checking Twitter trends...")
+        trends_source = TwitterTrendsSource(test_mode=test_mode)
+        articles = trends_source.get_novel_articles(1, existing_titles, similarity_threshold)
+
+    # If no Twitter articles, fall back to Metaphor
+    if not articles:
+        metaphor_source = MetaphorSource(METAPHOR_QUERY)
+        print(f"No Twitter articles, fetching from Metaphor about '{metaphor_source.query}'...")
+        articles = metaphor_source.get_novel_articles(1, existing_titles, similarity_threshold)
+
+    print(f"Found {len(articles)} articles to process")
 
     # Edit each article into a satirical story
     for i, article in enumerate(articles, 1):
-        print(f"Generating satirical story {i} of {len(articles)}...")
+        print(f"Generating satirical story {i} of {len(articles)} on {article.title}...")
+        editor = StoryEditor()
         story = editor.generate_story(article, model, image_quality, metadata, editor=False)
         print(story)
 
