@@ -78,6 +78,52 @@ def cache_responses(cache_file):
     return decorator
 
 
+class Article(BaseModel):
+    """Holds an article sourced from a news source"""
+
+    title: str
+    url: HttpUrl
+    data: dict
+
+    @classmethod
+    def from_metaphor(cls, article_data):
+        return cls(
+            title=article_data.get("title", ""),
+            url=article_data.get("url", ""),
+            data=article_data,
+        )
+
+    @staticmethod
+    def get_embeddings(texts):
+        """Utility function to batch embed input texts for similarity comparisons"""
+        response = litellm.embedding(model="text-embedding-ada-002", input=texts)
+        return [item["embedding"] for item in response.data]
+
+
+class Story(BaseModel):
+    """Holds a satirical story"""
+
+    original_article: Article
+    title: str
+    content: str
+    image_prompt: str = ""
+    blog_url: HttpUrl = ""
+    image_url: HttpUrl = ""
+    llm: str = ""
+
+    def __str__(self) -> str:
+        return f"""
+------------
+Title: {self.title}
+Image prompt: {self.image_prompt}
+Image URL: {self.image_url}
+------------
+{self.content}
+------------
+Source: {self.original_article.title}
+URL: {self.original_article.url}"""
+
+
 class JekyllPublisher:
     """Handles GitHub repository operations (posting story markdown files and checking existing content)"""
 
@@ -91,7 +137,7 @@ class JekyllPublisher:
             "Accept": "application/vnd.github.v3+json",
         }
 
-    def publish(self, story):
+    def publish(self, story: Story):
         jekyll_content = self.file_content(story)
         story.blog_url = self._create_filename(story)
         return self.commit_new_blog_post(story.blog_url, jekyll_content)
@@ -111,7 +157,7 @@ class JekyllPublisher:
         )
         return response
 
-    def file_content(self, story):
+    def file_content(self, story: Story):
         story.title = story.title.replace('"', "'")
         story.image_prompt = story.image_prompt.replace('"', "'")
         return (
@@ -161,7 +207,7 @@ class JekyllPublisher:
         cleaned = cleaned.replace(" ", "_").lower()
         return cleaned[:255]
 
-    def _create_filename(self, story):
+    def _create_filename(self, story: Story):
         return f"{self._get_date_for_filename()}-{self._clean_filename(story.original_article.title)}.md"
 
 
@@ -189,7 +235,7 @@ class TwitterPublisher:
         response = self.api.media_upload("temp.png")
         return response.media_id_string
 
-    def publish(self, story):
+    def publish(self, story: Story):
         # Always post to main account first
         media_id = self.upload_media(story.image_url)
         post_url = story.blog_url[:-3].replace("-", "/")
@@ -216,7 +262,7 @@ class MultiPublisher:
     def __init__(self):
         self.publishers = [JekyllPublisher(), TwitterPublisher()]
 
-    def publish_story(self, story):
+    def publish_story(self, story: Story):
         return [publisher.publish(story) for publisher in self.publishers]
 
     @property
@@ -227,10 +273,10 @@ class MultiPublisher:
 class NewsSource:
     """Base class for news sources. Implements get_articles and returns a list of Article instances."""
 
-    def get_articles(self, n_articles):
+    def get_articles(self, n_articles) -> list[Article | None]:
         raise NotImplementedError
 
-    def get_novel_articles(self, n_articles, existing_titles, similarity_threshold=0.9):
+    def get_novel_articles(self, n_articles, existing_titles, similarity_threshold=0.9) -> list[Article | None]:
         articles = self.get_articles(n_articles * 10)
         article_titles = [article.title for article in articles if article.title]
 
@@ -266,7 +312,7 @@ class MetaphorSource(NewsSource):
         }
 
     @cache_responses(".cache/metaphor.pkl")
-    def get_articles(self, n_articles):
+    def get_articles(self, n_articles) -> list[Article | None]:
         url = "https://api.metaphor.systems/search"
         payload = {
             "query": f"If you're interested in news about innovations in {self.query} by people or companies, you need to check out this article:",
@@ -306,10 +352,15 @@ class TwitterTrendsSource(NewsSource):
         return float(count_str)
 
     @cache_responses(".cache/twitter_trends.pkl")
-    def get_articles(self, n_articles):
+    def get_articles(self, n_articles) -> list[Article | None]:
         response = self.client._make_request("GET", "/2/users/personalized_trends", user_auth=True)
 
         if not response.data:
+            return []
+
+        # Check for non-premium response pattern
+        if len(response.data) == 1 and response.data[0].get("post_count") == "Unknown":
+            print("Warning: Non-premium Twitter response received")
             return []
 
         # Parse and sort trends by post_count
@@ -336,7 +387,6 @@ class TwitterTrendsSource(NewsSource):
         return [article for _, article in sorted(articles, reverse=True)][:n_articles]
 
 
-# Sources articles from Twitter mentions
 class TwitterMentionsSource(NewsSource):
     """Sources articles from Twitter mentions of the bot - uses too many monthly tweet requests"""
 
@@ -346,7 +396,7 @@ class TwitterMentionsSource(NewsSource):
         self.client = None
 
     @cache_responses(".cache/twitter_mentions.pkl")
-    def get_articles(self, n_articles):
+    def get_articles(self, n_articles) -> list[Article | None]:
         # Get mentions since last check
         mentions = self.client.get_users_mentions(
             1663646123674812418,
@@ -381,57 +431,15 @@ class TwitterMentionsSource(NewsSource):
         return articles[:n_articles]
 
 
-# Data structure for holding articles sourced from news sources
-class Article(BaseModel):
-    title: str
-    url: HttpUrl
-    data: dict
-
-    @classmethod
-    def from_metaphor(cls, article_data):
-        return cls(
-            title=article_data.get("title", ""),
-            url=article_data.get("url", ""),
-            data=article_data,
-        )
-
-    @staticmethod
-    def get_embeddings(texts):
-        """Utility function to batch embed input texts for similarity comparisons"""
-        response = litellm.embedding(model="text-embedding-ada-002", input=texts)
-        return [item["embedding"] for item in response.data]
-
-
-# Data structure for holding & displaying generated satirical story content
-class Story(BaseModel):
-    original_article: Article
-    title: str
-    content: str
-    image_prompt: str = ""
-    blog_url: HttpUrl = ""
-    image_url: HttpUrl = ""
-    llm: str = ""
-
-    def __str__(self) -> str:
-        return f"""
-------------
-Title: {self.title}
-Image prompt: {self.image_prompt}
-Image URL: {self.image_url}
-------------
-{self.content}
-------------
-Source: {self.original_article.title}
-URL: {self.original_article.url}"""
-
-
 class StoryEditor:
     """Edits articles into stories"""
 
     def __init__(self):
         pass
 
-    def generate_story(self, article, model="gpt-4o-mini", image_quality="standard", metadata=None, editor=False):
+    def generate_story(
+        self, article: Article, model="gpt-4o-mini", image_quality="standard", metadata=None, editor=False
+    ) -> Story | None:
         # Check for article title moderation issues & write a story
         if self._get_moderation_flag(article.title):
             print(f"Moderation issue with the LLM proposed story title: {article.title}")
@@ -542,6 +550,7 @@ def _generate_and_publish_stories(test_mode: bool = False):
         "claude-3-5-haiku-20241022" if test_mode else "claude-3-5-sonnet-20241022"
     )  # Use smaller model in test mode
     image_quality = "standard" if test_mode else "hd"
+    similarity_threshold = 0.95 if test_mode else 0.9  # Higher threshold in test mode
     litellm.set_verbose = True if test_mode else False  # For debugging
     metadata = {
         "environment": "development" if test_mode else "production",
@@ -553,15 +562,13 @@ def _generate_and_publish_stories(test_mode: bool = False):
     publisher = MultiPublisher()
     existing_titles = publisher.golden_source.get_recent_article_titles(months_ago=3)
 
-    # Set similarity threshold
-    similarity_threshold = 0.95 if test_mode else 0.9  # Higher threshold in test mode
+    # Source articles to base stories on
     articles = []
-
     # First check Twitter mentions
     # TODO: Enable once figure out how to do within free tier
-    #print("Checking for Twitter mentions...")
-    #mentions_source = TwitterMentionsSource(test_mode=test_mode)
-    #articles = mentions_source.get_novel_articles(1, existing_titles, similarity_threshold)
+    # print("Checking for Twitter mentions...")
+    # mentions_source = TwitterMentionsSource(test_mode=test_mode)
+    # articles = mentions_source.get_novel_articles(1, existing_titles, similarity_threshold)
 
     # If no Twitter mentions, check Twitter trends
     if not articles:
