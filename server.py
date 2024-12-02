@@ -2,7 +2,6 @@ import base64
 import functools
 import json
 import os
-import pickle
 import re
 import uuid
 from datetime import datetime, timedelta
@@ -39,35 +38,33 @@ app = modal.App(
 METAPHOR_QUERY = "artificial intelligence"
 
 
-def cache_responses(cache_file):
-    """Decorator to cache API responses in test mode"""
+def cache_articles(cache_file):
+    """Decorator to cache API responses with different expiration times based on test mode"""
 
     def decorator(func):
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
-            if not hasattr(self, "_test_mode") or not self._test_mode:
-                return func(self, *args, **kwargs)
+            cache_path = Path(cache_file).with_suffix(".json")
+            expiration = timedelta(days=365 if getattr(self, "_test_mode", False) else 1)
 
-            cache_path = Path(cache_file)
             # Load cache
             if cache_path.exists():
                 try:
-                    with cache_path.open("rb") as f:
-                        cache = pickle.load(f)
-                        if datetime.now() - cache["timestamp"] < timedelta(days=365):
-                            return cache["data"]
+                    with cache_path.open("r") as f:
+                        cache = json.load(f)
+                        if datetime.fromisoformat(cache["timestamp"]) + expiration > datetime.now():
+                            return [Article(title=a["title"], url=a["url"], data=a["data"]) for a in cache["data"]]
                 except Exception as e:
                     print(f"Cache read error: {e}")
-                    cache = {"timestamp": datetime.now(), "data": []}
+                    cache = {"timestamp": datetime.now().isoformat(), "data": []}
 
-            # Get fresh data
+            # Get fresh data and cache it
             data = func(self, *args, **kwargs)
-
-            # Save to cache
             try:
                 cache_path.parent.mkdir(exist_ok=True)
-                with cache_path.open("wb") as f:
-                    pickle.dump({"timestamp": datetime.now(), "data": data}, f)
+                cache_data = [{"title": a.title, "url": str(a.url), "data": a.data} for a in data]
+                with cache_path.open("w") as f:
+                    json.dump({"timestamp": datetime.now().isoformat(), "data": cache_data}, f)
             except Exception as e:
                 print(f"Cache write error: {e}")
 
@@ -311,7 +308,7 @@ class MetaphorSource(NewsSource):
             "x-api-key": self.api_key,
         }
 
-    @cache_responses(".cache/metaphor.pkl")
+    @cache_articles(".cache/metaphor.json")
     def get_articles(self, n_articles) -> list[Article | None]:
         url = "https://api.metaphor.systems/search"
         payload = {
@@ -334,6 +331,7 @@ class TwitterTrendsSource(NewsSource):
     def __init__(self, min_posts: int = 10000, test_mode: bool = False):
         self._test_mode = test_mode
         self.min_posts = min_posts
+        # Initialize client regardless of test mode
         self.client = tweepy.Client(
             consumer_key=os.environ["TWITTER_API_KEY"],
             consumer_secret=os.environ["TWITTER_API_SECRET"],
@@ -342,16 +340,17 @@ class TwitterTrendsSource(NewsSource):
         )
 
     def _parse_post_count(self, count_str: str) -> float:
-        """Convert strings like '32K' or '1.9B' to numbers"""
+        """Convert strings like '32K posts' or '1.9B posts' to numbers"""
         multipliers = {"K": 1000, "M": 1000000, "B": 1000000000}
-        count_str = count_str.strip().upper()
+        # Convert to upper first, then remove 'POSTS'
+        count_str = count_str.upper().replace("POSTS", "").strip()
 
         if count_str[-1] in multipliers:
             number = float(count_str[:-1])
             return number * multipliers[count_str[-1]]
         return float(count_str)
 
-    @cache_responses(".cache/twitter_trends.pkl")
+    @cache_articles(".cache/twitter_trends.json")
     def get_articles(self, n_articles) -> list[Article | None]:
         response = self.client._make_request("GET", "/2/users/personalized_trends", user_auth=True)
 
@@ -395,7 +394,7 @@ class TwitterMentionsSource(NewsSource):
         # Once get it working, use the bearer token here instead of OAuth
         self.client = None
 
-    @cache_responses(".cache/twitter_mentions.pkl")
+    @cache_articles(".cache/twitter_mentions.json")
     def get_articles(self, n_articles) -> list[Article | None]:
         # Get mentions since last check
         mentions = self.client.get_users_mentions(
