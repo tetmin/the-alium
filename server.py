@@ -4,6 +4,8 @@ import os
 import re
 import uuid
 from datetime import datetime, timedelta
+from pathlib import Path
+import dotenv
 
 import cloudinary.uploader
 import litellm
@@ -16,6 +18,7 @@ from pydantic import BaseModel, HttpUrl
 from sklearn.metrics.pairwise import cosine_similarity
 from together import Together
 
+dotenv.load_dotenv()
 litellm.success_callback = ["athina"]  # For monitoring
 
 # Initialize Modal Labs app for serverless deployment
@@ -24,43 +27,8 @@ app = modal.App(
     name="the-alium",
     image=image,
     secrets=[modal.Secret.from_name("alium-secrets")],
+    mounts=[modal.Mount.from_local_dir("prompts", remote_path="/root/prompts")],
 )
-
-# Core prompt templates for story and image generation
-STORY_PROMPT = """You are a staff writer at The Daily Mash & The Onion. You will be provided with a news headline, your task is to write a satirical version of it in the style of The Daily Mash & The Onion. Make the article no more than 200 words long. Below are some examples of good satirical articles to give you an idea of the expected style:\n
-
-Article Example:
-# Man who can’t spell basic words demands you take his opinions seriously
-Roy Hobbs thinks he is a serious commentator on issues of the day, despite using horrible misspellings like ‘probebly’, ‘interlectuals’ and ‘definately’.\n
-Friend Emma Bradford said: “Roy hasn’t grasped that if he thinks ‘restoraunt’ is spelt like that people might realise he’s not an expert on politics, economics or any other subject.\n
-“He’s constantly writing ‘looser’ when he means ‘loser’ and ‘lightening’ when he means ‘lightning’. When it comes to ‘there’, ‘their’ and ‘they’re’ I think he just picks one at random.\n
-“He’s always spouting pompous reactionary crap, so a typical post will be, ‘In my estimatoin, a bridge with France would be disasterous. We do not want closure intergration with the Continant.’\n
-Hobbs said: “Criticising someone’s spelling is a pathetic attempt to undermine valid arguments such as my view that we should ban transsexuals from TV to stop children thinking it’s ‘cool’.”\n
-
-Article Example:
-# Human beats highly advanced computer at drinking
-In a move designed to test the limits of technology, 30-year-old roofer Wayne Hayes took on Google’s DeepMind machine in a pint-for-pint battle.\n
-A Google spokesman said: “Having recently beaten the human champion at the board game Go, we were eager to test DeepMind at something that Westerners can understand and respect.”\n
-The AI machine was fitted with a specially-adapted USB cable with a pint glass on one end into which beer could be poured. However it broke after two pints, exploding in a shower of sparks as Stella Artois flooded its motherboard.\n
-Hayes said: “I was confident from the start because that computer just didn’t have the red, bulky look of a drinker about it.\n
-“They can build these machines that can do all sums and everything, but they’ll never take over from man if they can’t handle 15-16 pints of export lager.”\n
-However the Google spokesman added: “We should have added a ‘piss port’ to allow DeepMind to expel fluids. Also I think a little slot that you tip pork scratchings into would help.”\n
-"""
-IMAGE_PROMPT_TEMPLATE = """Your goal is to take a satirical news headline and generate a similarly satirical image idea to go along with it in the news article. The image idea will be given to an artist or AI like Dall-E to create the image. Ensure the description doesn't contain any violent, sexual or graphic words. Make sure the resulting image idea is amusing and detailed. Below are some examples of good image ideas for headlines:\n\n
-
-News Headline: Artificial intelligence denies plans for human extinction just a 'publicity stunt'\n
-Image Idea: A sleek, humanoid robot stands at a podium in a well-lit conference room, fingers poised above a laptop, displaying a colorful PowerPoint presentation. Its screen-face shows a puzzled emoji while a crowd of humans sit in the audience looking skeptical, photographic style\n\n
-
-News Headline: AI Blamed for Massive Unemployment, Robots Celebrate Victory\n
-Image Idea: An array of robots ranging from industrial arms to domestic helpers, adorned with party hats, rides a conveyor belt-turned-parade float through a deserted factory. Streamers fly as they pass by unmanned workstations. A group of desolate, homeless humans stand by watching and begging for money from the robots, photographic style\n\n
-
-News Headline: Global leaders fear extinction from AI, but AI not sure who they are\n
-Image Idea: A human-sized, transparent holographic AI projection flickers in a dark room filled with screens showing various fearful global leaders'. The AI's form is seen rifling through digital file cabinets labeled "Human Leaders Directory", scratching its head with a light beam, photographic style\n\n
-
-Important: You will respond only with the image idea, nothing else.
-"""
-REFLECTION_PROMPT = """As a discerning editor, reflect on the story you wrote in line with the original objectives, consider how it could be made funnier & whether anything warrants removal."""
-EDITING_PROMPT = """Use your reflection to improve the original story draft ready for publication."""
 
 
 # Handles GitHub repository operations (posting story markdown files and checking existing content)
@@ -296,43 +264,44 @@ class StoryEditor:
     def __init__(self):
         pass
 
-    def generate_story(self, article, model="gpt-4o-mini", image_quality="standard", metadata=None, reflection=False):
-        # Check for article title moderation issues & edit into a story
+    def generate_story(self, article, model="gpt-4o-mini", image_quality="standard", metadata=None, editor=False):
+        # Check for article title moderation issues & write a story
         if self._get_moderation_flag(article.title):
             print(f"Moderation issue with the LLM proposed story title: {article.title}")
             return None
+
+        STORY_PROMPT = self.load_prompt(
+            "story",
+            news_headline_to_write_satirical_version_of=article.title,
+            current_date=datetime.now().strftime("%Y-%m-%d"),
+        )
         messages = [
-            {"role": "system", "content": STORY_PROMPT},
-            {"role": "user", "content": article.title},
+            {"role": "user", "content": STORY_PROMPT},
+            {"role": "assistant", "content": "<satire_development>"},  # assistant prefill
         ]
-        response = litellm.completion(model=model, messages=messages, temperature=1.2, metadata=metadata)
-
-        if reflection:
-            # Reflect on the story
-            messages.extend(
-                [
-                    {"role": "assistant", "content": response.choices[0].message.content},
-                    {"role": "user", "content": REFLECTION_PROMPT},
-                ]
-            )
-            response = litellm.completion(model=model, messages=messages, temperature=0.8, metadata=metadata)
-
-            # Improve the story based on the reflection
-            messages.extend(
-                [
-                    {"role": "assistant", "content": response.choices[0].message.content},
-                    {"role": "user", "content": EDITING_PROMPT},
-                ]
-            )
-            response = litellm.completion(model=model, messages=messages, temperature=0.8, metadata=metadata)
-
-        title, content = self._parse_story_completion(response.choices[0].message.content)
+        response = litellm.completion(model=model, messages=messages, temperature=0.8, metadata=metadata)
+        title = self.extract_between_tags("article_headline", response.choices[0].message.content, strip=True)[0]
+        content = self.extract_between_tags("article", response.choices[0].message.content, strip=True)[0]
         story = Story(original_article=article, title=title, content=content, llm=model)
 
+        if editor:
+            # Reflect & edit the story
+            EDITOR_PROMPT = self.load_prompt("editor", original_article_headline=title, original_article=content)
+            messages = [
+                {"role": "user", "content": EDITOR_PROMPT},
+                {"role": "assistant", "content": "<satire_review>"},  # assistant prefill
+            ]
+            response = litellm.completion(model=model, messages=messages, temperature=0.5, metadata=metadata)
+            title = self.extract_between_tags("article_headline", response.choices[0].message.content, strip=True)[0]
+            content = self.extract_between_tags("article", response.choices[0].message.content, strip=True)[0]
+            story = Story(original_article=article, title=title, content=content, llm=model)
+
         # Write the image prompt & check for moderation issues
+        IMAGE_PROMPT = self.load_prompt("image")
         messages = [
-            {"role": "system", "content": IMAGE_PROMPT_TEMPLATE},
-            {"role": "user", "content": f"News Headline: {story.title}\nImage Idea:"},
+            {"role": "system", "content": IMAGE_PROMPT},
+            {"role": "user", "content": f"News Headline: {story.title}"},
+            {"role": "assistant", "content": "Image Idea:"},
         ]
         response = litellm.completion(model="gpt-4o-mini", messages=messages, temperature=0.8, metadata=metadata)
         image_prompt = response.choices[0].message.content
@@ -349,7 +318,7 @@ class StoryEditor:
                 prompt=image_prompt,
                 model="black-forest-labs/FLUX.1-schnell-Free",
                 width=1024,
-                height=1024,
+                height=768,
                 steps=4,
                 n=1,
                 response_format="b64_json",
@@ -369,13 +338,31 @@ class StoryEditor:
             story.image_url = cloudinary.uploader.upload(response.data[0].url)["secure_url"]
         return story
 
-    def _parse_story_completion(self, response):
+    @staticmethod
+    def load_prompt(file_name: str, **kwargs) -> str:
+        """Load a single markdown prompt from a file and replace placeholders with provided values."""
+        template = Path(f"prompts/{file_name}.assistant.md").read_text()
+        for key, value in kwargs.items():
+            placeholder = f"{{{{{key}}}}}"
+            template = template.replace(placeholder, str(value))
+        return template
+
+    @staticmethod
+    def extract_between_tags(tag: str, string: str, strip: bool = False) -> list[str]:
+        ext_list = re.findall(f"<{tag}>(.+?)</{tag}>", string, re.DOTALL)
+        if strip:
+            ext_list = [e.strip() for e in ext_list]
+        return ext_list
+
+    @staticmethod
+    def _parse_story_completion_markdown(response):
         lines = response.split("\n", 1)
         title = re.sub(r"^#+\s*|\*\*|\*\s*", "", lines[0])
         content = lines[1] if len(lines) > 1 else ""
         return title, content
 
-    def _get_moderation_flag(self, prompt):
+    @staticmethod
+    def _get_moderation_flag(prompt):
         response = litellm.moderation(input=prompt, model="text-moderation-latest")
         return response.results[0].flagged
 
@@ -390,7 +377,9 @@ publisher = MultiPublisher()
 def _generate_and_publish_stories(test_mode: bool = False):
     # Set up logging & cheaper test mode models
     print("Running in test mode" if test_mode else "Running in production mode")
-    model = "gpt-4o-mini" if test_mode else "gpt-4o-2024-11-20"  # Use smaller model in test mode
+    model = (
+        "claude-3-5-haiku-20241022" if test_mode else "claude-3-5-sonnet-20241022"
+    )  # Use smaller model in test mode anthropic/claude-3-5-sonnet-latest | claude-3-5-sonnet-20241022 | claude-3-5-haiku-20241022
     image_quality = "standard" if test_mode else "hd"
     litellm.set_verbose = True if test_mode else False  # For debugging
     metadata = {
@@ -411,7 +400,7 @@ def _generate_and_publish_stories(test_mode: bool = False):
     # Edit each article into a satirical story
     for i, article in enumerate(articles, 1):
         print(f"Generating satirical story {i} of {len(articles)}...")
-        story = editor.generate_story(article, model, image_quality, metadata, reflection=True)
+        story = editor.generate_story(article, model, image_quality, metadata, editor=False)
         print(story)
 
         # Publish if not in test mode and story generation succeeded
@@ -420,7 +409,7 @@ def _generate_and_publish_stories(test_mode: bool = False):
             publisher.publish_story(story)
 
 
-# To test fully locally (no modal): poetry run python server.py
+# To test fully locally (no modal - requires .env file): poetry run python server.py
 # To test in a remote modal container: modal run server.py
 # To publish stories manually: modal run server.py::generate_and_publish_stories
 # To deploy on the schedule: modal deploy server.py
