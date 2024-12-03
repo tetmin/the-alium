@@ -37,5 +37,5 @@ server.py will redeploy when merged to main
 - Add your own secrets to Modal
 - Deploy Modal server manually or setup ci-cd as per .github/workflows/ci-cd.yml
 ```
-poetry runm odal deploy server.py
+modal deploy server.py
 ```
