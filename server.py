@@ -1,11 +1,15 @@
 import base64
+import functools
 import json
 import os
 import re
 import uuid
+import uuid
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import cloudinary.uploader
+import dotenv
 import litellm
 import modal
 import numpy as np
@@ -16,6 +20,7 @@ from pydantic import BaseModel, HttpUrl
 from sklearn.metrics.pairwise import cosine_similarity
 from together import Together
 
+dotenv.load_dotenv()
 litellm.success_callback = ["athina"]  # For monitoring
 
 # Initialize Modal Labs app for serverless deployment
@@ -24,47 +29,102 @@ app = modal.App(
     name="the-alium",
     image=image,
     secrets=[modal.Secret.from_name("alium-secrets")],
+    mounts=[
+        modal.Mount.from_local_dir("prompts", remote_path="/root/prompts"),
+        modal.Mount.from_local_dir(".cache", remote_path="/root/.cache"),
+    ],
 )
 
-# Core prompt templates for story and image generation
-STORY_PROMPT = """You are a staff writer at The Daily Mash & The Onion. You will be provided with a news headline, your task is to write a satirical version of it in the style of The Daily Mash & The Onion. Make the article no more than 200 words long. Below are some examples of good satirical articles to give you an idea of the expected style:\n
-
-Article Example:
-# Man who can’t spell basic words demands you take his opinions seriously
-Roy Hobbs thinks he is a serious commentator on issues of the day, despite using horrible misspellings like ‘probebly’, ‘interlectuals’ and ‘definately’.\n
-Friend Emma Bradford said: “Roy hasn’t grasped that if he thinks ‘restoraunt’ is spelt like that people might realise he’s not an expert on politics, economics or any other subject.\n
-“He’s constantly writing ‘looser’ when he means ‘loser’ and ‘lightening’ when he means ‘lightning’. When it comes to ‘there’, ‘their’ and ‘they’re’ I think he just picks one at random.\n
-“He’s always spouting pompous reactionary crap, so a typical post will be, ‘In my estimatoin, a bridge with France would be disasterous. We do not want closure intergration with the Continant.’\n
-Hobbs said: “Criticising someone’s spelling is a pathetic attempt to undermine valid arguments such as my view that we should ban transsexuals from TV to stop children thinking it’s ‘cool’.”\n
-
-Article Example:
-# Human beats highly advanced computer at drinking
-In a move designed to test the limits of technology, 30-year-old roofer Wayne Hayes took on Google’s DeepMind machine in a pint-for-pint battle.\n
-A Google spokesman said: “Having recently beaten the human champion at the board game Go, we were eager to test DeepMind at something that Westerners can understand and respect.”\n
-The AI machine was fitted with a specially-adapted USB cable with a pint glass on one end into which beer could be poured. However it broke after two pints, exploding in a shower of sparks as Stella Artois flooded its motherboard.\n
-Hayes said: “I was confident from the start because that computer just didn’t have the red, bulky look of a drinker about it.\n
-“They can build these machines that can do all sums and everything, but they’ll never take over from man if they can’t handle 15-16 pints of export lager.”\n
-However the Google spokesman added: “We should have added a ‘piss port’ to allow DeepMind to expel fluids. Also I think a little slot that you tip pork scratchings into would help.”\n
-"""
-IMAGE_PROMPT_TEMPLATE = """Your goal is to take a satirical news headline and generate a similarly satirical image idea to go along with it in the news article. The image idea will be given to an artist or AI like Dall-E to create the image. Ensure the description doesn't contain any violent, sexual or graphic words. Make sure the resulting image idea is amusing and detailed. Below are some examples of good image ideas for headlines:\n\n
-
-News Headline: Artificial intelligence denies plans for human extinction just a 'publicity stunt'\n
-Image Idea: A sleek, humanoid robot stands at a podium in a well-lit conference room, fingers poised above a laptop, displaying a colorful PowerPoint presentation. Its screen-face shows a puzzled emoji while a crowd of humans sit in the audience looking skeptical, photographic style\n\n
-
-News Headline: AI Blamed for Massive Unemployment, Robots Celebrate Victory\n
-Image Idea: An array of robots ranging from industrial arms to domestic helpers, adorned with party hats, rides a conveyor belt-turned-parade float through a deserted factory. Streamers fly as they pass by unmanned workstations. A group of desolate, homeless humans stand by watching and begging for money from the robots, photographic style\n\n
-
-News Headline: Global leaders fear extinction from AI, but AI not sure who they are\n
-Image Idea: A human-sized, transparent holographic AI projection flickers in a dark room filled with screens showing various fearful global leaders'. The AI's form is seen rifling through digital file cabinets labeled "Human Leaders Directory", scratching its head with a light beam, photographic style\n\n
-
-Important: You will respond only with the image idea, nothing else.
-"""
-REFLECTION_PROMPT = """As a discerning editor, reflect on the story you wrote in line with the original objectives, consider how it could be made funnier & whether anything warrants removal."""
-EDITING_PROMPT = """Use your reflection to improve the original story draft ready for publication."""
+# Global config
+METAPHOR_QUERY = "artificial intelligence"
 
 
-# Handles GitHub repository operations (posting story markdown files and checking existing content)
+def cache_articles(cache_file):
+    """Decorator to cache API responses with different expiration times based on test mode"""
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            cache_path = Path(cache_file).with_suffix(".json")
+            expiration = timedelta(days=365 if getattr(self, "_test_mode", False) else 1)
+
+            # Load cache
+            if cache_path.exists():
+                try:
+                    with cache_path.open("r") as f:
+                        cache = json.load(f)
+                        if datetime.fromisoformat(cache["timestamp"]) + expiration > datetime.now():
+                            return [Article(title=a["title"], url=a["url"], data=a["data"]) for a in cache["data"]]
+                except Exception as e:
+                    print(f"Cache read error: {e}")
+                    cache = {"timestamp": datetime.now().isoformat(), "data": []}
+
+            # Get fresh data and cache it
+            data = func(self, *args, **kwargs)
+            try:
+                cache_path.parent.mkdir(exist_ok=True)
+                cache_data = [{"title": a.title, "url": str(a.url), "data": a.data} for a in data]
+                with cache_path.open("w") as f:
+                    json.dump({"timestamp": datetime.now().isoformat(), "data": cache_data}, f)
+            except Exception as e:
+                print(f"Cache write error: {e}")
+
+            return data
+
+        return wrapper
+
+    return decorator
+
+
+class Article(BaseModel):
+    """Holds an article sourced from a news source"""
+
+    title: str
+    url: HttpUrl
+    data: dict
+
+    @classmethod
+    def from_metaphor(cls, article_data):
+        return cls(
+            title=article_data.get("title", ""),
+            url=article_data.get("url", ""),
+            data=article_data,
+        )
+
+    @staticmethod
+    def get_embeddings(texts):
+        """Utility function to batch embed input texts for similarity comparisons"""
+        response = litellm.embedding(model="text-embedding-ada-002", input=texts)
+        return [item["embedding"] for item in response.data]
+
+
+class Story(BaseModel):
+    """Holds a satirical story"""
+
+    original_article: Article
+    title: str
+    content: str
+    image_prompt: str = ""
+    blog_url: HttpUrl = ""
+    image_url: HttpUrl = ""
+    llm: str = ""
+
+    def __str__(self) -> str:
+        return f"""
+------------
+Title: {self.title}
+Image prompt: {self.image_prompt}
+Image URL: {self.image_url}
+------------
+{self.content}
+------------
+Source: {self.original_article.title}
+URL: {self.original_article.url}"""
+
+
 class JekyllPublisher:
+    """Handles GitHub repository operations (posting story markdown files and checking existing content)"""
+
     def __init__(self):
         self.owner = "tetmin"
         self.repo = "the-alium"
@@ -75,7 +135,7 @@ class JekyllPublisher:
             "Accept": "application/vnd.github.v3+json",
         }
 
-    def publish(self, story):
+    def publish(self, story: Story):
         jekyll_content = self.file_content(story)
         story.blog_url = self._create_filename(story)
         return self.commit_new_blog_post(story.blog_url, jekyll_content)
@@ -95,13 +155,13 @@ class JekyllPublisher:
         )
         return response
 
-    def file_content(self, story):
+    def file_content(self, story: Story):
         story.title = story.title.replace('"', "'")
         story.image_prompt = story.image_prompt.replace('"', "'")
         return (
             f'---\ntitle: "{story.title}"\ndate: {self._get_datetime_for_frontmatter()}\nimage: {story.image_url}\nllm: {story.llm}\n---\n'
             f'![Alt Text]({story.image_url} "{story.image_prompt}")\n\n{story.content}'
-            f"\n\n---\n*AInspired by: [{story.original_article.title}]({story.original_article.url})*"  # modified
+            f"\n\n---\n*AInspired by: [{story.original_article.title}]({story.original_article.url})*"
         )
 
     def get_existing_article_titles(self):
@@ -145,12 +205,13 @@ class JekyllPublisher:
         cleaned = cleaned.replace(" ", "_").lower()
         return cleaned[:255]
 
-    def _create_filename(self, story):
+    def _create_filename(self, story: Story):
         return f"{self._get_date_for_filename()}-{self._clean_filename(story.original_article.title)}.md"
 
 
-# Manages Twitter API interactions for posting stories
 class TwitterPublisher:
+    """Manages Twitter API interactions for posting stories"""
+
     def __init__(self):
         self.client = tweepy.Client(
             consumer_key=os.environ["TWITTER_API_KEY"],
@@ -172,20 +233,34 @@ class TwitterPublisher:
         response = self.api.media_upload("temp.png")
         return response.media_id_string
 
-    def publish(self, story):
+    def publish(self, story: Story):
+        # Always post to main account first
         media_id = self.upload_media(story.image_url)
         post_url = story.blog_url[:-3].replace("-", "/")
         post_url = f"https://www.thealium.com/{post_url}.html"
         text = f"{story.title}\n\n{post_url}?nolongurl"
-        return self.client.create_tweet(text=text, media_ids=[media_id] if media_id else None)
+        response = self.client.create_tweet(text=text, media_ids=[media_id] if media_id else None)
+
+        # If story was sourced from Twitter, reply to original thread with our tweet
+        if story.original_article.data.get("source") == "twitter_mention":
+            tweet_id = story.original_article.data.get("tweet_id")
+            if tweet_id:
+                self.client.create_tweet(
+                    text="Here's your AI-generated satirical story!",
+                    in_reply_to_tweet_id=tweet_id,
+                    quote_tweet_id=response.data["id"],
+                )
+
+        return response
 
 
-# Handles publishing stories across multiple platforms, currently via GitHub Pages (for Jekyll) and Twitter
 class MultiPublisher:
+    """Handles publishing stories across multiple platforms"""
+
     def __init__(self):
         self.publishers = [JekyllPublisher(), TwitterPublisher()]
 
-    def publish_story(self, story):
+    def publish_story(self, story: Story):
         return [publisher.publish(story) for publisher in self.publishers]
 
     @property
@@ -193,37 +268,13 @@ class MultiPublisher:
         return next(p for p in self.publishers if isinstance(p, JekyllPublisher))
 
 
-# Sources articles from news sources (currently only Metaphor implemented)
 class NewsSource:
-    """
-    Fetches recent AI news articles from Metaphor API. Implements get_articles and returns a list of Article instances.
-    """
+    """Base class for news sources. Implements get_articles and returns a list of Article instances."""
 
-    def __init__(self, search_query):
-        self.query = search_query
-        self.api_key = os.environ["METAPHOR_API_KEY"]
-        self.headers = {
-            "accept": "application/json",
-            "content-type": "application/json",
-            "x-api-key": self.api_key,
-        }
+    def get_articles(self, n_articles) -> list[Article | None]:
+        raise NotImplementedError
 
-    def get_articles(self, n_articles):
-        url = "https://api.metaphor.systems/search"
-        payload = {
-            "query": f"If you're interested in news about innovations in {self.query} by people or companies, you need to check out this article:",
-            "numResults": 100,
-            "startPublishedDate": (datetime.today() - timedelta(days=3)).strftime("%Y-%m-%dT00:00:00Z"),
-        }
-        response = requests.post(url, json=payload, headers=self.headers, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            raw_articles = data.get("articles", data.get("results", []))
-            articles = [Article.from_metaphor(article_data) for article_data in raw_articles][:n_articles]
-            return articles
-        return []
-
-    def get_novel_articles(self, n_articles, existing_titles, similarity_threshold=0.9):
+    def get_novel_articles(self, n_articles, existing_titles, similarity_threshold=0.9) -> list[Article | None]:
         articles = self.get_articles(n_articles * 10)
         article_titles = [article.title for article in articles if article.title]
 
@@ -247,92 +298,185 @@ class NewsSource:
         return novel_articles
 
 
-# Data structure for holding articles sourced from news sources
-class Article(BaseModel):
-    title: str
-    url: HttpUrl
-    data: dict
+class MetaphorSource(NewsSource):
+    def __init__(self, query, test_mode: bool = False):
+        self._test_mode = test_mode
+        self.query = query
+        self.api_key = os.environ["METAPHOR_API_KEY"]
+        self.headers = {
+            "accept": "application/json",
+            "content-type": "application/json",
+            "x-api-key": self.api_key,
+        }
 
-    @classmethod
-    def from_metaphor(cls, article_data):
-        return cls(
-            title=article_data.get("title", ""),
-            url=article_data.get("url", ""),
-            data=article_data,
+    @cache_articles(".cache/metaphor.json")
+    def get_articles(self, n_articles) -> list[Article | None]:
+        url = "https://api.metaphor.systems/search"
+        payload = {
+            "query": f"If you're interested in news about innovations in {self.query} by people or companies, you need to check out this article:",
+            "numResults": 100,
+            "startPublishedDate": (datetime.today() - timedelta(days=3)).strftime("%Y-%m-%dT00:00:00Z"),
+        }
+        response = requests.post(url, json=payload, headers=self.headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            raw_articles = data.get("articles", data.get("results", []))
+            articles = [Article.from_metaphor(article_data) for article_data in raw_articles][:n_articles]
+            return articles
+        return []
+
+
+class TwitterTrendsSource(NewsSource):
+    """Sources articles from personalised trends of an X Premium user"""
+
+    def __init__(self, min_posts: int = 10000, test_mode: bool = False):
+        self._test_mode = test_mode
+        self.min_posts = min_posts
+        # Initialize client regardless of test mode
+        self.client = tweepy.Client(
+            consumer_key=os.environ["TWITTER_API_KEY"],
+            consumer_secret=os.environ["TWITTER_API_SECRET"],
+            access_token=os.environ["X_PREMIUM_ACCESS_TOKEN"],
+            access_token_secret=os.environ["X_PREMIUM_ACCESS_TOKEN_SECRET"],
         )
 
-    @staticmethod
-    def get_embeddings(texts):
-        """Utility function to batch embed input texts for similarity comparisons"""
-        response = litellm.embedding(model="text-embedding-ada-002", input=texts)
-        return [item["embedding"] for item in response.data]
+    def _parse_post_count(self, count_str: str) -> float:
+        """Convert strings like '32K posts' or '1.9B posts' to numbers"""
+        multipliers = {"K": 1000, "M": 1000000, "B": 1000000000}
+        # Convert to upper first, then remove 'POSTS'
+        count_str = count_str.upper().replace("POSTS", "").strip()
+
+        if count_str[-1] in multipliers:
+            number = float(count_str[:-1])
+            return number * multipliers[count_str[-1]]
+        return float(count_str)
+
+    @cache_articles(".cache/twitter_trends.json")
+    def get_articles(self, n_articles) -> list[Article | None]:
+        response = self.client._make_request("GET", "/2/users/personalized_trends", user_auth=True)
+
+        if not response.data:
+            return []
+
+        # Check for non-premium response pattern
+        if len(response.data) == 1 and response.data[0].get("post_count") == "Unknown":
+            print("Warning: Non-premium Twitter response received")
+            return []
+
+        # Parse and sort trends by post_count
+        articles = []
+        for trend in response.data:
+            post_count = self._parse_post_count(trend["post_count"])
+            if post_count >= self.min_posts:  # Filter out low-engagement trends
+                articles.append(
+                    (
+                        post_count,
+                        Article(
+                            title=trend["trend_name"],
+                            url=f"https://twitter.com/search?q={trend['trend_name']}",
+                            data={
+                                "post_count": post_count,
+                                "category": trend.get("category"),
+                                "source": "twitter_trend",
+                            },
+                        ),
+                    )
+                )
+
+        # Sort by post_count and return just the Article objects
+        return [article for _, article in sorted(articles, reverse=True)][:n_articles]
 
 
-# Data structure for holding & displaying generated satirical story content
-class Story(BaseModel):
-    original_article: Article
-    title: str
-    content: str
-    image_prompt: str = ""
-    blog_url: HttpUrl = ""
-    image_url: HttpUrl = ""
-    llm: str = ""
+class TwitterMentionsSource(NewsSource):
+    """Sources articles from Twitter mentions of the bot - uses too many monthly tweet requests"""
 
-    def __str__(self) -> str:
-        return f"""
-------------
-Title: {self.title}
-Image prompt: {self.image_prompt}
-Image URL: {self.image_url}
-------------
-{self.content}
-------------
-Source: {self.original_article.title}
-URL: {self.original_article.url}"""
+    def __init__(self, test_mode: bool = False):
+        self._test_mode = test_mode
+        # Once get it working, use the bearer token here instead of OAuth
+        self.client = None
+
+    @cache_articles(".cache/twitter_mentions.json")
+    def get_articles(self, n_articles) -> list[Article | None]:
+        # Get mentions since last check
+        mentions = self.client.get_users_mentions(
+            1663646123674812418,
+            max_results=100,
+            expansions=["referenced_tweets.id"],
+            tweet_fields=["created_at", "text", "author_id", "conversation_id", "referenced_tweets"],
+        )
+
+        articles = []
+        # Convert mentions to Article objects
+        for tweet in mentions["data"] or []:
+            parent_tweet = (
+                next((ref for ref in mentions.includes["tweets"] if ref.id == tweet.conversation_id), None)
+                if mentions.includes and "tweets" in mentions.includes
+                else None
+            )
+
+            title = parent_tweet.text if parent_tweet else tweet.text
+            articles.append(
+                Article(
+                    title=title,
+                    url=f"https://twitter.com/user/status/{tweet.conversation_id or tweet.id}",
+                    data={
+                        "tweet_id": tweet.id,
+                        "conversation_id": tweet.conversation_id,
+                        "author_id": tweet.author_id,
+                        "source": "twitter_mention",
+                    },
+                )
+            )
+
+        return articles[:n_articles]
 
 
-# Edits articles into stories
 class StoryEditor:
+    """Edits articles into stories"""
+
     def __init__(self):
         pass
 
-    def generate_story(self, article, model="gpt-4o-mini", image_quality="standard", metadata=None, reflection=False):
-        # Check for article title moderation issues & edit into a story
+    def generate_story(
+        self, article: Article, model="gpt-4o-mini", image_quality="standard", metadata=None, editor=False
+    ) -> Story | None:
+        # Check for article title moderation issues & write a story
         if self._get_moderation_flag(article.title):
             print(f"Moderation issue with the LLM proposed story title: {article.title}")
             return None
+
+        STORY_PROMPT = self.load_prompt(
+            "story",
+            news_headline_to_write_satirical_version_of=article.title,
+            current_date=datetime.now().strftime("%Y-%m-%d"),
+        )
         messages = [
-            {"role": "system", "content": STORY_PROMPT},
-            {"role": "user", "content": article.title},
+            {"role": "user", "content": STORY_PROMPT},
+            {"role": "assistant", "content": "<satire_development>"},  # assistant prefill
         ]
-        response = litellm.completion(model=model, messages=messages, temperature=1.2, metadata=metadata)
-
-        if reflection:
-            # Reflect on the story
-            messages.extend(
-                [
-                    {"role": "assistant", "content": response.choices[0].message.content},
-                    {"role": "user", "content": REFLECTION_PROMPT},
-                ]
-            )
-            response = litellm.completion(model=model, messages=messages, temperature=0.8, metadata=metadata)
-
-            # Improve the story based on the reflection
-            messages.extend(
-                [
-                    {"role": "assistant", "content": response.choices[0].message.content},
-                    {"role": "user", "content": EDITING_PROMPT},
-                ]
-            )
-            response = litellm.completion(model=model, messages=messages, temperature=0.8, metadata=metadata)
-
-        title, content = self._parse_story_completion(response.choices[0].message.content)
+        response = litellm.completion(model=model, messages=messages, temperature=0.8, metadata=metadata)
+        title = self.extract_between_tags("article_headline", response.choices[0].message.content, strip=True)[0]
+        content = self.extract_between_tags("article", response.choices[0].message.content, strip=True)[0]
         story = Story(original_article=article, title=title, content=content, llm=model)
 
+        if editor:
+            # Reflect & edit the story
+            EDITOR_PROMPT = self.load_prompt("editor", original_article_headline=title, original_article=content)
+            messages = [
+                {"role": "user", "content": EDITOR_PROMPT},
+                {"role": "assistant", "content": "<satire_review>"},  # assistant prefill
+            ]
+            response = litellm.completion(model=model, messages=messages, temperature=0.5, metadata=metadata)
+            title = self.extract_between_tags("article_headline", response.choices[0].message.content, strip=True)[0]
+            content = self.extract_between_tags("article", response.choices[0].message.content, strip=True)[0]
+            story = Story(original_article=article, title=title, content=content, llm=model)
+
         # Write the image prompt & check for moderation issues
+        IMAGE_PROMPT = self.load_prompt("image")
         messages = [
-            {"role": "system", "content": IMAGE_PROMPT_TEMPLATE},
-            {"role": "user", "content": f"News Headline: {story.title}\nImage Idea:"},
+            {"role": "system", "content": IMAGE_PROMPT},
+            {"role": "user", "content": f"News Headline: {story.title}"},
+            {"role": "assistant", "content": "Image Idea:"},
         ]
         response = litellm.completion(model="gpt-4o-mini", messages=messages, temperature=0.8, metadata=metadata)
         image_prompt = response.choices[0].message.content
@@ -349,7 +493,7 @@ class StoryEditor:
                 prompt=image_prompt,
                 model="black-forest-labs/FLUX.1-schnell-Free",
                 width=1024,
-                height=1024,
+                height=768,
                 steps=4,
                 n=1,
                 response_format="b64_json",
@@ -369,29 +513,44 @@ class StoryEditor:
             story.image_url = cloudinary.uploader.upload(response.data[0].url)["secure_url"]
         return story
 
-    def _parse_story_completion(self, response):
+    @staticmethod
+    def load_prompt(file_name: str, **kwargs) -> str:
+        """Load a single markdown prompt from a file and replace placeholders with provided values."""
+        template = Path(f"prompts/{file_name}.assistant.md").read_text()
+        for key, value in kwargs.items():
+            placeholder = f"{{{{{key}}}}}"
+            template = template.replace(placeholder, str(value))
+        return template
+
+    @staticmethod
+    def extract_between_tags(tag: str, string: str, strip: bool = False) -> list[str]:
+        ext_list = re.findall(f"<{tag}>(.+?)</{tag}>", string, re.DOTALL)
+        if strip:
+            ext_list = [e.strip() for e in ext_list]
+        return ext_list
+
+    @staticmethod
+    def _parse_story_completion_markdown(response):
         lines = response.split("\n", 1)
         title = re.sub(r"^#+\s*|\*\*|\*\s*", "", lines[0])
         content = lines[1] if len(lines) > 1 else ""
         return title, content
 
-    def _get_moderation_flag(self, prompt):
+    @staticmethod
+    def _get_moderation_flag(prompt):
         response = litellm.moderation(input=prompt, model="text-moderation-latest")
         return response.results[0].flagged
-
-
-# Specify the query filter for source articles (e.g., "artificial intelligence")
-source = NewsSource("artificial intelligence")
-editor = StoryEditor()
-publisher = MultiPublisher()
 
 
 # Main function to generate and publish satirical stories
 def _generate_and_publish_stories(test_mode: bool = False):
     # Set up logging & cheaper test mode models
     print("Running in test mode" if test_mode else "Running in production mode")
-    model = "gpt-4o-mini" if test_mode else "gpt-4o-2024-11-20"  # Use smaller model in test mode
+    model = (
+        "claude-3-5-haiku-20241022" if test_mode else "claude-3-5-sonnet-20241022"
+    )  # Use smaller model in test mode
     image_quality = "standard" if test_mode else "hd"
+    similarity_threshold = 0.95 if test_mode else 0.9  # Higher threshold in test mode
     litellm.set_verbose = True if test_mode else False  # For debugging
     metadata = {
         "environment": "development" if test_mode else "production",
@@ -400,18 +559,36 @@ def _generate_and_publish_stories(test_mode: bool = False):
 
     # Fetch titles of the articles recently edited into stories
     print("Getting existing titles from past 3 months...")
+    publisher = MultiPublisher()
     existing_titles = publisher.golden_source.get_recent_article_titles(months_ago=3)
 
-    # Fetch and filter new news articles based on similarity to existing articles
-    print(f"Fetching novel articles about '{source.query}'...")
-    similarity_threshold = 0.95 if test_mode else 0.9  # Higher threshold in test mode
-    articles = source.get_novel_articles(1, existing_titles, similarity_threshold)
-    print(f"Found {len(articles)} novel articles")
+    # Source articles to base stories on
+    articles = []
+    # First check Twitter mentions
+    # TODO: Enable once figure out how to do within free tier
+    # print("Checking for Twitter mentions...")
+    # mentions_source = TwitterMentionsSource(test_mode=test_mode)
+    # articles = mentions_source.get_novel_articles(1, existing_titles, similarity_threshold)
+
+    # If no Twitter mentions, check Twitter trends
+    if not articles:
+        print("Checking Twitter trends...")
+        trends_source = TwitterTrendsSource(test_mode=test_mode)
+        articles = trends_source.get_novel_articles(1, existing_titles, similarity_threshold)
+
+    # If no Twitter articles, fall back to Metaphor
+    if not articles:
+        metaphor_source = MetaphorSource(METAPHOR_QUERY)
+        print(f"No Twitter articles, fetching from Metaphor about '{metaphor_source.query}'...")
+        articles = metaphor_source.get_novel_articles(1, existing_titles, similarity_threshold)
+
+    print(f"Found {len(articles)} articles to process")
 
     # Edit each article into a satirical story
     for i, article in enumerate(articles, 1):
-        print(f"Generating satirical story {i} of {len(articles)}...")
-        story = editor.generate_story(article, model, image_quality, metadata, reflection=True)
+        print(f"Generating satirical story {i} of {len(articles)} on {article.title}...")
+        editor = StoryEditor()
+        story = editor.generate_story(article, model, image_quality, metadata, editor=False)
         print(story)
 
         # Publish if not in test mode and story generation succeeded
@@ -420,11 +597,23 @@ def _generate_and_publish_stories(test_mode: bool = False):
             publisher.publish_story(story)
 
 
-# To test fully locally (no modal): poetry run python server.py
+# To test fully locally (no modal - requires .env file): poetry run python server.py
 # To test in a remote modal container: modal run server.py
 # To publish stories manually: modal run server.py::generate_and_publish_stories
 # To deploy on the schedule: modal deploy server.py
 @app.function(schedule=modal.Cron("1 14 * * *"))
+def generate_and_publish_stories(test_mode: bool = False):
+    _generate_and_publish_stories(test_mode)
+
+
+@app.local_entrypoint()
+def main():
+    generate_and_publish_stories.remote(test_mode=True)
+
+
+if __name__ == "__main__":
+    _generate_and_publish_stories(test_mode=True)
+
 def generate_and_publish_stories(test_mode: bool = False):
     _generate_and_publish_stories(test_mode)
 
