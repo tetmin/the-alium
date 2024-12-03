@@ -29,7 +29,10 @@ litellm.success_callback = ["athina"]  # For monitoring
 # Initialize Modal Labs app for serverless deployment
 image = (
     modal.Image.debian_slim()
-    .poetry_install_from_file("pyproject.toml")
+    .pip_install("uv")
+    .workdir("/app")
+    .copy_local_file("pyproject.toml", "pyproject.toml")
+    .run_commands("uv pip install --system --compile-bytecode .")
     .run_commands("playwright install --with-deps chromium")
 )
 app = modal.App(
@@ -37,8 +40,9 @@ app = modal.App(
     image=image,
     secrets=[modal.Secret.from_name("alium-secrets")],
     mounts=[
-        modal.Mount.from_local_dir("prompts", remote_path="/root/prompts"),
-        modal.Mount.from_local_dir(".cache", remote_path="/root/.cache"),
+        modal.Mount.from_local_dir("prompts", remote_path="/app/prompts"),
+        modal.Mount.from_local_dir(".cache", remote_path="/app/.cache"),
+        modal.Mount.from_local_file("pyproject.toml", remote_path="/app/pyproject.toml"),
     ],
 )
 

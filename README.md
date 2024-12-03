@@ -16,11 +16,11 @@ The flow is roughly:
 
 ## Usage Guide
 ### Local Development
-For local Python development (with poetry):
+For local Python development using [uv](https://docs.astral.sh/uv/):
 ```
-curl -sSL https://install.python-poetry.org | python3 -
-poetry install
-poetry run python server.py
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync
+uv run python server.py
 ```
 To run with [Modal](https://modal.com/), first setup secrets, then:
 ```
