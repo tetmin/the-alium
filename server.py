@@ -10,11 +10,14 @@ from pathlib import Path
 import cloudinary.uploader
 import dotenv
 import litellm
+import markdown
 import modal
 import numpy as np
 import pytz
 import requests
 import tweepy
+from jinja2 import Template
+from playwright.sync_api import sync_playwright
 from pydantic import BaseModel, HttpUrl
 from sklearn.metrics.pairwise import cosine_similarity
 from together import Together
@@ -23,7 +26,11 @@ dotenv.load_dotenv()
 litellm.success_callback = ["athina"]  # For monitoring
 
 # Initialize Modal Labs app for serverless deployment
-image = modal.Image.debian_slim().poetry_install_from_file("pyproject.toml")
+image = (
+    modal.Image.debian_slim()
+    .poetry_install_from_file("pyproject.toml")
+    .run_commands("playwright install --with-deps chromium")
+)
 app = modal.App(
     name="the-alium",
     image=image,
@@ -103,10 +110,12 @@ class Story(BaseModel):
     original_article: Article
     title: str
     content: str
-    image_prompt: str = ""
+    image_prompt: str | None = None
+    image_url: HttpUrl | None = None
+    social_image: bytes | None = None
     blog_url: HttpUrl = ""
-    image_url: HttpUrl = ""
     llm: str = ""
+    markdown: str = ""
 
     def __str__(self) -> str:
         return f"""
@@ -119,6 +128,86 @@ Image URL: {self.image_url}
 ------------
 Source: {self.original_article.title}
 URL: {self.original_article.url}"""
+
+    def get_screenshot(self, padding: int = 40) -> bytes:
+        """Generate a screenshot of the story for social media."""
+        # Strip frontmatter and convert content to HTML
+        content = self.markdown.split("---", 2)[-1]
+        html = markdown.markdown(content)
+        template = Template("""
+            <html>
+            <head>
+                <style>
+                    body { 
+                        margin: 0; 
+                        font-family: -apple-system, system-ui, BlinkMacSystemFont;
+                        background: white;
+                        padding: {{ padding }}px;
+                    }
+                    .article {
+                        max-width: {{ max_width }}px;
+                        margin: 0 auto;
+                    }
+                    h1 { 
+                        font-size: 48px;
+                        line-height: 1.2;
+                        margin-bottom: 30px;
+                        color: #1a1a1a;
+                    }
+                    p {
+                        font-size: 26px;
+                        line-height: 1.6;
+                        color: #333;
+                    }
+                    img {
+                        width: 100%;  /* Changed from max-width to width */
+                        height: auto;
+                        margin: 15px 0;
+                        display: block;  /* Ensures no inline spacing issues */
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="article">
+                    <h1>{{ title }}</h1>
+                    {{ content | safe }}
+                </div>
+            </body>
+            </html>
+        """)
+        viewport_width = 1300
+        max_width = viewport_width - (padding * 2)
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": viewport_width, "height": 628})
+            page.set_content(template.render(title=self.title, content=html, padding=padding, max_width=max_width))
+
+            # Get the actual content height
+            content_height = page.evaluate("""() => {
+                const article = document.querySelector('.article');
+                return article.getBoundingClientRect().height;
+            }""")
+
+            # Set viewport to match content plus padding
+            page.set_viewport_size({"width": viewport_width, "height": int(content_height + (padding * 2))})
+            image = page.screenshot(type="png")
+            browser.close()
+            return image
+
+    def get_markdown(self) -> str:
+        """Generate Jekyll-compatible markdown for the story"""
+        self.title = self.title.replace('"', "'")
+        self.image_prompt = self.image_prompt.replace('"', "'")
+
+        now = datetime.now(pytz.utc).astimezone(pytz.timezone("Europe/London"))
+        frontmatter_date = now.strftime("%Y-%m-%d %H:%M:%S %z")
+
+        return (
+            f'---\ntitle: "{self.title}"\ndate: {frontmatter_date}\nimage: {self.image_url}\nllm: {self.llm}\n---\n'
+            f'![Alt Text]({self.image_url} "{self.image_prompt}")\n\n{self.content}'
+            f"\n\n---\n*AInspired by: [{self.original_article.title}]({self.original_article.url})*"
+        )
 
 
 class JekyllPublisher:
@@ -135,9 +224,8 @@ class JekyllPublisher:
         }
 
     def publish(self, story: Story):
-        jekyll_content = self.file_content(story)
         story.blog_url = self._create_filename(story)
-        return self.commit_new_blog_post(story.blog_url, jekyll_content)
+        return self.commit_new_blog_post(story.blog_url, story.markdown)
 
     def commit_new_blog_post(self, filename, content):
         path = f"_posts/{filename}"
@@ -153,15 +241,6 @@ class JekyllPublisher:
             timeout=10,
         )
         return response
-
-    def file_content(self, story: Story):
-        story.title = story.title.replace('"', "'")
-        story.image_prompt = story.image_prompt.replace('"', "'")
-        return (
-            f'---\ntitle: "{story.title}"\ndate: {self._get_datetime_for_frontmatter()}\nimage: {story.image_url}\nllm: {story.llm}\n---\n'
-            f'![Alt Text]({story.image_url} "{story.image_prompt}")\n\n{story.content}'
-            f"\n\n---\n*AInspired by: [{story.original_article.title}]({story.original_article.url})*"
-        )
 
     def get_existing_article_titles(self):
         response = requests.get(f"{self.base_url}/_posts", timeout=10)
@@ -190,10 +269,6 @@ class JekyllPublisher:
                 print(f"Invalid date format in filename: {title_with_date}")
                 continue
         return filtered_titles
-
-    def _get_datetime_for_frontmatter(self):
-        now = datetime.now(pytz.utc).astimezone(pytz.timezone("Europe/London"))
-        return now.strftime("%Y-%m-%d %H:%M:%S %z")
 
     def _get_date_for_filename(self):
         now = datetime.now(pytz.utc).astimezone(pytz.timezone("Europe/London"))
@@ -225,16 +300,25 @@ class TwitterPublisher:
         )
         self.api = tweepy.API(auth)
 
-    def upload_media(self, image_url):
-        response = requests.get(image_url, timeout=10)
-        with open("temp.png", "wb") as out_file:
-            out_file.write(response.content)
-        response = self.api.media_upload("temp.png")
-        return response.media_id_string
+    def upload_media(self, image_url=None, image_bytes=None):
+        if image_url:
+            response = requests.get(image_url, timeout=10)
+            with open("temp.png", "wb") as out_file:
+                out_file.write(response.content)
+            response = self.api.media_upload("temp.png")
+            return response.media_id_string
+        elif image_bytes:
+            response = self.api.media_upload(filename="story.png", file=image_bytes)
+            return response.media_id_string
+        return None
 
     def publish(self, story: Story):
-        # Always post to main account first
-        media_id = self.upload_media(story.image_url)
+        # Try social image first, fall back to regular image
+        if story.social_image:
+            media_id = self.upload_media(image_bytes=story.social_image)
+        else:
+            media_id = self.upload_media(image_url=story.image_url)
+
         post_url = story.blog_url[:-3].replace("-", "/")
         post_url = f"https://www.thealium.com/{post_url}.html"
         text = f"{story.title}\n\n{post_url}?nolongurl"
@@ -510,6 +594,10 @@ class StoryEditor:
                 metadata=metadata,
             )
             story.image_url = cloudinary.uploader.upload(response.data[0].url)["secure_url"]
+
+        # Generate markdown & screenshot
+        story.markdown = story.get_markdown()
+        story.social_image = story.get_screenshot()
         return story
 
     @staticmethod
@@ -594,6 +682,8 @@ def _generate_and_publish_stories(test_mode: bool = False):
         if story and not test_mode:
             print("Publishing story...")
             publisher.publish_story(story)
+        else:
+            Path("story_example.png").write_bytes(story.social_image)
 
 
 # To test fully locally (no modal - requires .env file): poetry run python server.py
