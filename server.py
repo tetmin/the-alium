@@ -4,6 +4,7 @@ import json
 import os
 import re
 import uuid
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -601,6 +602,18 @@ def _generate_and_publish_stories(test_mode: bool = False):
 # To publish stories manually: modal run server.py::generate_and_publish_stories
 # To deploy on the schedule: modal deploy server.py
 @app.function(schedule=modal.Cron("1 14 * * *"))
+def generate_and_publish_stories(test_mode: bool = False):
+    _generate_and_publish_stories(test_mode)
+
+
+@app.local_entrypoint()
+def main():
+    generate_and_publish_stories.remote(test_mode=True)
+
+
+if __name__ == "__main__":
+    _generate_and_publish_stories(test_mode=True)
+
 def generate_and_publish_stories(test_mode: bool = False):
     _generate_and_publish_stories(test_mode)
 
