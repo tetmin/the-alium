@@ -1,5 +1,6 @@
 import base64
 import functools
+import io
 import json
 import os
 import re
@@ -21,7 +22,6 @@ from playwright.sync_api import sync_playwright
 from pydantic import BaseModel, HttpUrl
 from sklearn.metrics.pairwise import cosine_similarity
 from together import Together
-import io
 
 dotenv.load_dotenv()
 litellm.success_callback = ["athina"]  # For monitoring
@@ -247,10 +247,10 @@ class JekyllPublisher:
         response = requests.get(f"{self.base_url}/_posts", timeout=10)
         if response.status_code != 200:
             return []
-        
+
         cutoff_date = datetime.now() - timedelta(days=months_ago * 30)
         filtered_titles = []
-        
+
         for file in json.loads(response.text):
             try:
                 # Extract date and title using regex for robustness
@@ -258,14 +258,14 @@ class JekyllPublisher:
                 if match:
                     date_str = match.group(1)
                     date = datetime.strptime(date_str, "%Y-%m-%d")
-                    
+
                     if date >= cutoff_date:
-                        title = match.group(2).replace('_', ' ')
+                        title = match.group(2).replace("_", " ")
                         filtered_titles.append(title)
             except ValueError:
                 print(f"Invalid date format in filename: {file['name']}")
                 continue
-            
+
         return filtered_titles
 
     def _get_date_for_filename(self):
@@ -274,17 +274,17 @@ class JekyllPublisher:
 
     def _clean_filename(self, filename):
         # First, replace special characters that cause URL issues
-        cleaned = re.sub(r'[–—]', '-', filename)  # Convert em/en dashes to regular dashes
-        cleaned = re.sub(r'[,]', '', cleaned)     # Remove commas
+        cleaned = re.sub(r"[–—]", "-", filename)  # Convert em/en dashes to regular dashes
+        cleaned = re.sub(r"[,]", "", cleaned)  # Remove commas
         # Then handle other invalid filename characters
-        cleaned = re.sub(r'[\\/:*?"<>|]', '', cleaned)
+        cleaned = re.sub(r'[\\/:*?"<>|]', "", cleaned)
         cleaned = cleaned.replace(" ", "_").lower()
         # Remove any remaining non-ASCII characters
         cleaned = "".join(c for c in cleaned if c.isascii())
         # Replace multiple underscores with single
-        cleaned = re.sub(r'_+', '_', cleaned)
+        cleaned = re.sub(r"_+", "_", cleaned)
         # Remove leading/trailing underscores
-        cleaned = cleaned.strip('_')
+        cleaned = cleaned.strip("_")
         return cleaned[:255]
 
     def _create_filename(self, story: Story):
@@ -332,7 +332,7 @@ class TwitterPublisher:
             media_id = self.upload_media(image_url=story.image_url)
             text = f"{story.title}\n\n{post_url}?nolongurl"
             response = self.client.create_tweet(text=text, media_ids=[media_id] if media_id else None)
-        
+
         # If story was sourced from Twitter, reply to original thread with our tweet
         if story.original_article.data.get("source") == "twitter_mention":
             tweet_id = story.original_article.data.get("tweet_id")
