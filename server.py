@@ -21,6 +21,7 @@ from playwright.sync_api import sync_playwright
 from pydantic import BaseModel, HttpUrl
 from sklearn.metrics.pairwise import cosine_similarity
 from together import Together
+import io
 
 dotenv.load_dotenv()
 litellm.success_callback = ["athina"]  # For monitoring
@@ -242,32 +243,29 @@ class JekyllPublisher:
         )
         return response
 
-    def get_existing_article_titles(self):
-        response = requests.get(f"{self.base_url}/_posts", timeout=10)
-        if response.status_code == 200:
-            data = json.loads(response.text)
-            return [file["name"] for file in data]
-        return []
-
     def get_recent_article_titles(self, months_ago=3):
-        all_titles = self.get_existing_article_titles()
+        response = requests.get(f"{self.base_url}/_posts", timeout=10)
+        if response.status_code != 200:
+            return []
+        
         cutoff_date = datetime.now() - timedelta(days=months_ago * 30)
         filtered_titles = []
-        for title_with_date in all_titles:
+        
+        for file in json.loads(response.text):
             try:
                 # Extract date and title using regex for robustness
-                match = re.match(r"(\d{4}-\d{2}-\d{2})-(.*).md", title_with_date)
-
+                match = re.match(r"(\d{4}-\d{2}-\d{2})-(.+?)\.(md|markdown)$", file["name"], re.IGNORECASE)
                 if match:
                     date_str = match.group(1)
                     date = datetime.strptime(date_str, "%Y-%m-%d")
-
+                    
                     if date >= cutoff_date:
-                        title = match.group(2)
+                        title = match.group(2).replace('_', ' ')
                         filtered_titles.append(title)
             except ValueError:
-                print(f"Invalid date format in filename: {title_with_date}")
+                print(f"Invalid date format in filename: {file['name']}")
                 continue
+            
         return filtered_titles
 
     def _get_date_for_filename(self):
@@ -275,8 +273,18 @@ class JekyllPublisher:
         return now.strftime("%Y-%m-%d")
 
     def _clean_filename(self, filename):
-        cleaned = re.sub(r'[\\/:"\'\’\‘*?<>|]', "", filename)
+        # First, replace special characters that cause URL issues
+        cleaned = re.sub(r'[–—]', '-', filename)  # Convert em/en dashes to regular dashes
+        cleaned = re.sub(r'[,]', '', cleaned)     # Remove commas
+        # Then handle other invalid filename characters
+        cleaned = re.sub(r'[\\/:*?"<>|]', '', cleaned)
         cleaned = cleaned.replace(" ", "_").lower()
+        # Remove any remaining non-ASCII characters
+        cleaned = "".join(c for c in cleaned if c.isascii())
+        # Replace multiple underscores with single
+        cleaned = re.sub(r'_+', '_', cleaned)
+        # Remove leading/trailing underscores
+        cleaned = cleaned.strip('_')
         return cleaned[:255]
 
     def _create_filename(self, story: Story):
@@ -303,27 +311,28 @@ class TwitterPublisher:
     def upload_media(self, image_url=None, image_bytes=None):
         if image_url:
             response = requests.get(image_url, timeout=10)
-            with open("temp.png", "wb") as out_file:
-                out_file.write(response.content)
-            response = self.api.media_upload("temp.png")
+            file = io.BytesIO(response.content)
+            response = self.api.media_upload(filename="story.png", file=file)
             return response.media_id_string
         elif image_bytes:
-            response = self.api.media_upload(filename="story.png", file=image_bytes)
+            file = io.BytesIO(image_bytes)
+            response = self.api.media_upload(filename="story.png", file=file)
             return response.media_id_string
         return None
 
     def publish(self, story: Story):
-        # Try social image first, fall back to regular image
-        if story.social_image:
-            media_id = self.upload_media(image_bytes=story.social_image)
-        else:
-            media_id = self.upload_media(image_url=story.image_url)
-
         post_url = story.blog_url[:-3].replace("-", "/")
         post_url = f"https://www.thealium.com/{post_url}.html"
-        text = f"{story.title}\n\n{post_url}?nolongurl"
-        response = self.client.create_tweet(text=text, media_ids=[media_id] if media_id else None)
 
+        # Try newspaper image style post first, fall back to regular image + URL
+        if story.social_image:
+            media_id = self.upload_media(image_bytes=story.social_image)
+            response = self.client.create_tweet(text=story.title, media_ids=[media_id] if media_id else None)
+        else:
+            media_id = self.upload_media(image_url=story.image_url)
+            text = f"{story.title}\n\n{post_url}?nolongurl"
+            response = self.client.create_tweet(text=text, media_ids=[media_id] if media_id else None)
+        
         # If story was sourced from Twitter, reply to original thread with our tweet
         if story.original_article.data.get("source") == "twitter_mention":
             tweet_id = story.original_article.data.get("tweet_id")
@@ -412,7 +421,7 @@ class MetaphorSource(NewsSource):
 class TwitterTrendsSource(NewsSource):
     """Sources articles from personalised trends of an X Premium user"""
 
-    def __init__(self, min_posts: int = 10000, test_mode: bool = False):
+    def __init__(self, min_posts: int = 1000, test_mode: bool = False):
         self._test_mode = test_mode
         self.min_posts = min_posts
         # Initialize client regardless of test mode
