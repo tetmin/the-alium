@@ -568,14 +568,10 @@ class StoryEditor:
             story = Story(original_article=article, title=title, content=content, llm=model)
 
         # Write the image prompt & check for moderation issues
-        IMAGE_PROMPT = self.load_prompt("image")
-        messages = [
-            {"role": "system", "content": IMAGE_PROMPT},
-            {"role": "user", "content": f"News Headline: {story.title}"},
-            {"role": "assistant", "content": "Image Idea:"},
-        ]
-        response = litellm.completion(model="gpt-4o-mini", messages=messages, temperature=0.8, metadata=metadata)
-        image_prompt = response.choices[0].message.content
+        IMAGE_PROMPT = self.load_prompt("image", news_headline=title)
+        messages = [{"role": "user", "content": IMAGE_PROMPT}]
+        response = litellm.completion(model="gpt-4o-mini", messages=messages, temperature=0.7, metadata=metadata)
+        image_prompt = self.extract_between_tags("image_prompt", response.choices[0].message.content, strip=True)[0]
         if self._get_moderation_flag(image_prompt):
             print(f"Image prompt failed moderation: {image_prompt}")
             return None
