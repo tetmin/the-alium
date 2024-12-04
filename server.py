@@ -3,6 +3,7 @@ import functools
 import io
 import json
 import os
+import random
 import re
 import uuid
 from datetime import datetime, timedelta
@@ -656,7 +657,9 @@ def _generate_and_publish_stories(test_mode: bool = False):
     # Set up logging & cheaper test mode models
     print("Running in test mode" if test_mode else "Running in production mode")
     model = (
-        "claude-3-5-haiku-20241022" if test_mode else "claude-3-5-sonnet-20241022"
+        "claude-3-5-haiku-20241022"
+        if test_mode
+        else random.choice(["claude-3-5-sonnet-20241022", "gpt-4o-2024-11-20"])
     )  # Some options: "xai/grok-beta", "claude-3-5-sonnet-20241022", "gpt-4o-2024-11-20"
     image_quality = "standard" if test_mode else "hd"
     similarity_threshold = 0.95 if test_mode else 0.9  # Higher threshold in test mode
