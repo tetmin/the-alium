@@ -105,7 +105,7 @@ class Article(BaseModel):
     @staticmethod
     def get_embeddings(texts):
         """Utility function to batch embed input texts for similarity comparisons"""
-        response = litellm.embedding(model="text-embedding-ada-002", input=texts)
+        response = litellm.embedding(model="text-embedding-3-small", input=texts)
         return [item["embedding"] for item in response.data]
 
 
@@ -449,7 +449,14 @@ class TwitterTrendsSource(NewsSource):
 
     @cache_articles(".cache/twitter_trends.json")
     def get_articles(self, n_articles) -> list[Article | None]:
-        response = self.client._make_request("GET", "/2/users/personalized_trends", user_auth=True)
+        try:
+            response = self.client._make_request("GET", "/2/users/personalized_trends", user_auth=True)
+        except tweepy.errors.TooManyRequests:
+            print("Twitter API rate limit exceeded")
+            return []
+        except Exception as e:
+            print(f"Twitter API error: {e}")
+            return []
 
         if not response.data:
             return []
@@ -493,13 +500,19 @@ class TwitterMentionsSource(NewsSource):
 
     @cache_articles(".cache/twitter_mentions.json")
     def get_articles(self, n_articles) -> list[Article | None]:
-        # Get mentions since last check
-        mentions = self.client.get_users_mentions(
-            1663646123674812418,
-            max_results=100,
-            expansions=["referenced_tweets.id"],
-            tweet_fields=["created_at", "text", "author_id", "conversation_id", "referenced_tweets"],
-        )
+        try:
+            mentions = self.client.get_users_mentions(
+                1663646123674812418,
+                max_results=100,
+                expansions=["referenced_tweets.id"],
+                tweet_fields=["created_at", "text", "author_id", "conversation_id", "referenced_tweets"],
+            )
+        except tweepy.errors.TooManyRequests:
+            print("Twitter API rate limit exceeded")
+            return []
+        except Exception as e:
+            print(f"Twitter API error: {e}")
+            return []
 
         articles = []
         # Convert mentions to Article objects
@@ -568,14 +581,10 @@ class StoryEditor:
             story = Story(original_article=article, title=title, content=content, llm=model)
 
         # Write the image prompt & check for moderation issues
-        IMAGE_PROMPT = self.load_prompt("image")
-        messages = [
-            {"role": "system", "content": IMAGE_PROMPT},
-            {"role": "user", "content": f"News Headline: {story.title}"},
-            {"role": "assistant", "content": "Image Idea:"},
-        ]
-        response = litellm.completion(model="gpt-4o-mini", messages=messages, temperature=0.8, metadata=metadata)
-        image_prompt = response.choices[0].message.content
+        IMAGE_PROMPT = self.load_prompt("image", news_headline=title)
+        messages = [{"role": "user", "content": IMAGE_PROMPT}]
+        response = litellm.completion(model="gpt-4o-mini", messages=messages, temperature=0.7, metadata=metadata)
+        image_prompt = self.extract_between_tags("image_prompt", response.choices[0].message.content, strip=True)[0]
         if self._get_moderation_flag(image_prompt):
             print(f"Image prompt failed moderation: {image_prompt}")
             return None
@@ -638,7 +647,7 @@ class StoryEditor:
 
     @staticmethod
     def _get_moderation_flag(prompt):
-        response = litellm.moderation(input=prompt, model="text-moderation-latest")
+        response = litellm.moderation(input=prompt, model="omni-moderation-latest")
         return response.results[0].flagged
 
 
@@ -648,7 +657,7 @@ def _generate_and_publish_stories(test_mode: bool = False):
     print("Running in test mode" if test_mode else "Running in production mode")
     model = (
         "claude-3-5-haiku-20241022" if test_mode else "claude-3-5-sonnet-20241022"
-    )  # Use smaller model in test mode
+    )  # Some options: "xai/grok-beta", "claude-3-5-sonnet-20241022", "gpt-4o-2024-11-20"
     image_quality = "standard" if test_mode else "hd"
     similarity_threshold = 0.95 if test_mode else 0.9  # Higher threshold in test mode
     litellm.set_verbose = True if test_mode else False  # For debugging
@@ -695,7 +704,7 @@ def _generate_and_publish_stories(test_mode: bool = False):
         if story and not test_mode:
             print("Publishing story...")
             publisher.publish_story(story)
-        else:
+        elif test_mode:
             Path("story_example.png").write_bytes(story.social_image)
 
 
