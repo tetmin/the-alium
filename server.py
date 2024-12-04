@@ -105,7 +105,7 @@ class Article(BaseModel):
     @staticmethod
     def get_embeddings(texts):
         """Utility function to batch embed input texts for similarity comparisons"""
-        response = litellm.embedding(model="text-embedding-ada-002", input=texts)
+        response = litellm.embedding(model="text-embedding-3-small", input=texts)
         return [item["embedding"] for item in response.data]
 
 
@@ -638,7 +638,7 @@ class StoryEditor:
 
     @staticmethod
     def _get_moderation_flag(prompt):
-        response = litellm.moderation(input=prompt, model="text-moderation-latest")
+        response = litellm.moderation(input=prompt, model="omni-moderation-latest")
         return response.results[0].flagged
 
 
@@ -648,7 +648,7 @@ def _generate_and_publish_stories(test_mode: bool = False):
     print("Running in test mode" if test_mode else "Running in production mode")
     model = (
         "claude-3-5-haiku-20241022" if test_mode else "claude-3-5-sonnet-20241022"
-    )  # Use smaller model in test mode
+    )  # Some options: "xai/grok-beta", "claude-3-5-sonnet-20241022", "gpt-4o-2024-11-20"
     image_quality = "standard" if test_mode else "hd"
     similarity_threshold = 0.95 if test_mode else 0.9  # Higher threshold in test mode
     litellm.set_verbose = True if test_mode else False  # For debugging
