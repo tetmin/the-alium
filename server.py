@@ -449,7 +449,14 @@ class TwitterTrendsSource(NewsSource):
 
     @cache_articles(".cache/twitter_trends.json")
     def get_articles(self, n_articles) -> list[Article | None]:
-        response = self.client._make_request("GET", "/2/users/personalized_trends", user_auth=True)
+        try:
+            response = self.client._make_request("GET", "/2/users/personalized_trends", user_auth=True)
+        except tweepy.errors.TooManyRequests:
+            print("Twitter API rate limit exceeded")
+            return []
+        except Exception as e:
+            print(f"Twitter API error: {e}")
+            return []
 
         if not response.data:
             return []
@@ -493,13 +500,19 @@ class TwitterMentionsSource(NewsSource):
 
     @cache_articles(".cache/twitter_mentions.json")
     def get_articles(self, n_articles) -> list[Article | None]:
-        # Get mentions since last check
-        mentions = self.client.get_users_mentions(
-            1663646123674812418,
-            max_results=100,
-            expansions=["referenced_tweets.id"],
-            tweet_fields=["created_at", "text", "author_id", "conversation_id", "referenced_tweets"],
-        )
+        try:
+            mentions = self.client.get_users_mentions(
+                1663646123674812418,
+                max_results=100,
+                expansions=["referenced_tweets.id"],
+                tweet_fields=["created_at", "text", "author_id", "conversation_id", "referenced_tweets"],
+            )
+        except tweepy.errors.TooManyRequests:
+            print("Twitter API rate limit exceeded")
+            return []
+        except Exception as e:
+            print(f"Twitter API error: {e}")
+            return []
 
         articles = []
         # Convert mentions to Article objects
@@ -695,7 +708,7 @@ def _generate_and_publish_stories(test_mode: bool = False):
         if story and not test_mode:
             print("Publishing story...")
             publisher.publish_story(story)
-        else:
+        elif test_mode:
             Path("story_example.png").write_bytes(story.social_image)
 
 

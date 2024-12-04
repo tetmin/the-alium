@@ -12,7 +12,8 @@ The flow is roughly:
 - [x] ~~Refactor codebase to extend source, editor, publisher~~
 - [x] ~~Publisher: Virtual screenshot of story for posting to Twitter as an image~~
 - [ ] Source: Make @alium_ai mentions work given Twitter rate limits
-- [ ] Editor: Define an image style, improve image consistency & humour
+- [x] ~~Editor: Define an image style, improve image consistency & humour~~
+- [ ] Source: More alternative news sources e.g. https://www.brief.news/
 
 ## Usage Guide
 ### Local Development
