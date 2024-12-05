@@ -58,28 +58,35 @@ def cache_articles(cache_file):
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
             cache_path = Path(cache_file).with_suffix(".json")
-            expiration = timedelta(days=365 if getattr(self, "_test_mode", False) else 1)
+            expiration = timedelta(days=365 if getattr(self, "_test_mode", False) else 2)
 
-            # Load cache
+            # Try to use unexpired cache first
             if cache_path.exists():
                 try:
                     with cache_path.open("r") as f:
                         cache = json.load(f)
                         if datetime.fromisoformat(cache["timestamp"]) + expiration > datetime.now():
                             return [Article(title=a["title"], url=a["url"], data=a["data"]) for a in cache["data"]]
+                        print(f"Cache expired for {cache_file}, fetching fresh data")
                 except Exception as e:
                     print(f"Cache read error: {e}")
-                    cache = {"timestamp": datetime.now().isoformat(), "data": []}
 
-            # Get fresh data and cache it
-            data = func(self, *args, **kwargs)
+            # Cache expired or doesn't exist - try wrapped function
             try:
-                cache_path.parent.mkdir(exist_ok=True)
-                cache_data = [{"title": a.title, "url": str(a.url), "data": a.data} for a in data]
-                with cache_path.open("w") as f:
-                    json.dump({"timestamp": datetime.now().isoformat(), "data": cache_data}, f)
+                data = func(self, *args, **kwargs)
             except Exception as e:
-                print(f"Cache write error: {e}")
+                print(f"Get articles failed: {e}")
+                return []
+            
+            # Only cache if we got data back
+            if data:
+                try:
+                    cache_path.parent.mkdir(exist_ok=True)
+                    cache_data = [{"title": a.title, "url": str(a.url), "data": a.data} for a in data]
+                    with cache_path.open("w") as f:
+                        json.dump({"timestamp": datetime.now().isoformat(), "data": cache_data}, f)
+                except Exception as e:
+                    print(f"Cache write error: {e}")
 
             return data
 
@@ -450,18 +457,9 @@ class TwitterTrendsSource(NewsSource):
 
     @cache_articles(".cache/twitter_trends.json")
     def get_articles(self, n_articles) -> list[Article | None]:
-        try:
-            response = self.client._make_request("GET", "/2/users/personalized_trends", user_auth=True)
-        except tweepy.errors.TooManyRequests:
-            print("Twitter API rate limit exceeded")
+        response = self.client._make_request("GET", "/2/users/personalized_trends", user_auth=True)
+        if not response or not response.data:
             return []
-        except Exception as e:
-            print(f"Twitter API error: {e}")
-            return []
-
-        if not response.data:
-            return []
-
         # Check for non-premium response pattern
         if len(response.data) == 1 and response.data[0].get("post_count") == "Unknown":
             print("Warning: Non-premium Twitter response received")
@@ -472,23 +470,22 @@ class TwitterTrendsSource(NewsSource):
         for trend in response.data:
             post_count = self._parse_post_count(trend["post_count"])
             if post_count >= self.min_posts:  # Filter out low-engagement trends
-                articles.append(
-                    (
-                        post_count,
-                        Article(
-                            title=trend["trend_name"],
-                            url=f"https://twitter.com/search?q={trend['trend_name']}",
-                            data={
-                                "post_count": post_count,
-                                "category": trend.get("category"),
-                                "source": "twitter_trend",
-                            },
-                        ),
-                    )
+                article = Article(
+                    title=trend["trend_name"],
+                    url=f"https://twitter.com/search?q={trend['trend_name']}",
+                    data={
+                        "post_count": post_count,
+                        "category": trend.get("category"),
+                        "source": "twitter_trend",
+                    },
                 )
+                articles.append(article)
 
-        # Sort by post_count and return just the Article objects
-        return [article for _, article in sorted(articles, reverse=True)][:n_articles]
+        # Sort articles by post_count in descending order
+        articles.sort(key=lambda article: article.data["post_count"], reverse=True)
+
+        # Return the top n_articles
+        return articles[:n_articles]
 
 
 class TwitterMentionsSource(NewsSource):
@@ -670,23 +667,14 @@ def _generate_and_publish_stories(test_mode: bool = False):
     }
 
     # Fetch titles of the articles recently edited into stories
-    print("Getting existing titles from past 3 months...")
+    print("Getting existing article titles from past 3 months...")
     publisher = MultiPublisher()
     existing_titles = publisher.golden_source.get_recent_article_titles(months_ago=3)
 
-    # Source articles to base stories on
-    articles = []
-    # First check Twitter mentions
-    # TODO: Enable once figure out how to do within free tier
-    # print("Checking for Twitter mentions...")
-    # mentions_source = TwitterMentionsSource(test_mode=test_mode)
-    # articles = mentions_source.get_novel_articles(1, existing_titles, similarity_threshold)
-
-    # If no Twitter mentions, check Twitter trends
-    if not articles:
-        print("Checking Twitter trends...")
-        trends_source = TwitterTrendsSource(test_mode=test_mode)
-        articles = trends_source.get_novel_articles(1, existing_titles, similarity_threshold)
+    # Source articles to base stories on from Personalised Twitter trends
+    print("Checking Twitter trends...")
+    trends_source = TwitterTrendsSource(test_mode=test_mode)
+    articles = trends_source.get_novel_articles(1, existing_titles, similarity_threshold)
 
     # If no Twitter articles, fall back to Metaphor
     if not articles:
@@ -711,7 +699,7 @@ def _generate_and_publish_stories(test_mode: bool = False):
             Path("story_example.png").write_bytes(story.social_image)
 
 
-# To test fully locally (no modal - requires .env file): poetry run python server.py
+# To test fully locally (no modal - requires .env file): uv run python server.py
 # To test in a remote modal container: modal run server.py
 # To publish stories manually: modal run server.py::generate_and_publish_stories
 # To deploy on the schedule: modal deploy server.py
