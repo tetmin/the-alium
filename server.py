@@ -504,8 +504,10 @@ class MultiPublisher:
         # No need to pass asset_manager around
 
     def publish_story(self, story: Story):
+        print("Publishing story...")
         responses = [publisher.publish(story) for publisher in self.publishers]
         self.asset_manager.cleanup_temporary()
+        print("Published to all platforms")
         return responses
 
     @property
@@ -743,8 +745,7 @@ class StoryEditor:
                 n=1,
                 response_format="b64_json",
             )
-            image_data = base64.b64decode(response.data[0].b64_json)
-            story.image_url = self.asset_manager.upload(image_data, permanent=not self.test_mode)
+            image = base64.b64decode(response.data[0].b64_json)
         else:
             response = litellm.image_generation(
                 prompt=image_prompt,
@@ -754,14 +755,18 @@ class StoryEditor:
                 quality=image_quality,
                 metadata=metadata,
             )
-            story.image_url = self.asset_manager.upload(response.data[0].url, permanent=not self.test_mode)
+            image = response.data[0].url
+        
+        # Has to be permanent as used in Jekyll blog
+        story.image_url = self.asset_manager.upload(image, permanent=not self.test_mode)
 
-        # Generate markdown, screenshot & temporary asset
+        # Generate markdown, render page, screenshot & store asset
         story.markdown = story.get_markdown()
         story.screenshot = story.get_screenshot()
         if story.screenshot:
             image_data = base64.b64decode(story.screenshot)
-            story.screenshot_url = self.asset_manager.upload(image_data)
+            # TODO: This is only permanent because webhook takes time to complete & image is needed for that
+            story.screenshot_url = self.asset_manager.upload(image_data, permanent=not self.test_mode)
 
         return story
 
@@ -838,7 +843,6 @@ def _generate_and_publish_stories(test_mode: bool = False):
 
         # Publish if not in test mode and story generation succeeded
         if story and not test_mode:
-            print("Publishing story...")
             publisher.publish_story(story)
         elif test_mode and story:
             Path("story_example.jpg").write_bytes(base64.b64decode(story.screenshot))
