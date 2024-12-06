@@ -532,11 +532,11 @@ class NewsSource:
     def get_articles(self, n_articles) -> list[Article | None]:
         raise NotImplementedError
 
-    def get_novel_articles(self, n_articles, existing_titles, similarity_threshold=0.9) -> list[Article | None]:
+    def get_novel_articles(self, n_articles, existing_titles, similarity_threshold=0.9, metadata=None) -> list[Article | None]:
         articles = self.get_articles(n_articles * 10)
         
         # Filter out sensitive and moderated articles
-        articles = self._filter_sensitive_content(articles)
+        articles = self._filter_sensitive_content(articles, metadata=metadata)
         filtered_articles = [a for a in articles if not a.sensitive]
         filtered_titles = [a.title for a in filtered_articles]
 
@@ -563,7 +563,7 @@ class NewsSource:
             novel_articles = [filtered_articles[i] for i in novel_indices][:n_articles]
         return novel_articles
     
-    def _filter_sensitive_content(self, articles: list[Article]) -> list[Article]:
+    def _filter_sensitive_content(self, articles: list[Article], metadata: dict = None) -> list[Article]:
         """Marks articles as sensitive if they contain sensitive content or fail moderation"""
         messages = [
             {
@@ -583,13 +583,14 @@ class NewsSource:
                 messages=messages,
                 response_format=ContentFilterList,
                 temperature=0,
-                max_tokens=1024
+                max_tokens=1024,
+                metadata=metadata,
             )
             content = response.choices[0].message.content
             results = ContentFilterList.model_validate_json(content).content_filters
             # Batch moderation check
             titles = [a.title for a in articles]
-            moderation_response = litellm.moderation(input=titles, model="omni-moderation-latest")
+            moderation_response = litellm.moderation(input=titles, model="omni-moderation-latest", metadata=metadata)
             # Update articles with both content and moderation results
             for article, result, mod_result in zip(articles, results, moderation_response.results):
                 article.sensitive = result.is_sensitive
@@ -788,7 +789,7 @@ class StoryEditor:
         messages = [{"role": "user", "content": IMAGE_PROMPT}]
         response = litellm.completion(model="gpt-4o-mini", messages=messages, temperature=0.7, metadata=metadata)
         image_prompt = self.extract_between_tags("image_prompt", response.choices[0].message.content, strip=True)[0]
-        if self._get_moderation_flag(image_prompt):
+        if self._get_moderation_flag(image_prompt, metadata):
             print(f"Image prompt failed moderation: {image_prompt}")
             return None
         story.image_prompt = image_prompt
@@ -855,8 +856,8 @@ class StoryEditor:
         return title, content
 
     @staticmethod
-    def _get_moderation_flag(prompt):
-        response = litellm.moderation(input=prompt, model="omni-moderation-latest")
+    def _get_moderation_flag(prompt, metadata=None):
+        response = litellm.moderation(input=prompt, model="omni-moderation-latest", metadata=metadata)
         return response.results[0].flagged
 
 
@@ -885,13 +886,13 @@ def _generate_and_publish_stories(test_mode: bool = False):
     # Source articles to base stories on from Personalised Twitter trends
     print("Checking Twitter trends...")
     trends_source = TwitterTrendsSource(test_mode=test_mode)
-    articles = trends_source.get_novel_articles(1, existing_titles, similarity_threshold)
+    articles = trends_source.get_novel_articles(1, existing_titles, similarity_threshold, metadata=metadata)
 
     # If no Twitter articles, fall back to Metaphor
     if not articles:
         metaphor_source = MetaphorSource(METAPHOR_QUERY)
         print(f"No Twitter articles, fetching from Metaphor about '{metaphor_source.query}'...")
-        articles = metaphor_source.get_novel_articles(1, existing_titles, similarity_threshold)
+        articles = metaphor_source.get_novel_articles(1, existing_titles, similarity_threshold, metadata=metadata)
 
     print(f"Found {len(articles)} articles to process")
 
