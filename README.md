@@ -11,8 +11,11 @@ The flow is roughly:
 - [x] ~~Improve image generation (article title -> image prompt is not very good & gets cencored sometimes)~~
 - [x] ~~Refactor codebase to extend source, editor, publisher~~
 - [x] ~~Publisher: Virtual screenshot of story for posting to Twitter as an image~~
-- [ ] Source: Make @alium_ai mentions work given Twitter rate limits
 - [x] ~~Editor: Define an image style, improve image consistency & humour~~
+- [x] ~~Source: Don't source articles about disasters e.g. war, murder, etc.~~
+- [ ] Editor: Enable LiteLLM caching for development
+- [ ] Source: Improve Twitter caching (not currently persistent on Modal, only for local development)
+- [ ] Source: Make @alium_ai mentions work given Twitter rate limits
 - [ ] Source: More alternative news sources e.g. https://www.brief.news/
 
 ## Usage Guide
