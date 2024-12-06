@@ -5,9 +5,11 @@ import json
 import os
 import random
 import re
+import subprocess
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Union
 
 import cloudinary.uploader
 import dotenv
@@ -19,6 +21,7 @@ import pytz
 import requests
 import tweepy
 from jinja2 import Template
+from PIL import Image
 from playwright.sync_api import sync_playwright
 from pydantic import BaseModel, HttpUrl
 from sklearn.metrics.pairwise import cosine_similarity
@@ -58,28 +61,35 @@ def cache_articles(cache_file):
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
             cache_path = Path(cache_file).with_suffix(".json")
-            expiration = timedelta(days=365 if getattr(self, "_test_mode", False) else 1)
+            expiration = timedelta(days=365 if getattr(self, "_test_mode", False) else 2)
 
-            # Load cache
+            # Try to use unexpired cache first
             if cache_path.exists():
                 try:
                     with cache_path.open("r") as f:
                         cache = json.load(f)
                         if datetime.fromisoformat(cache["timestamp"]) + expiration > datetime.now():
                             return [Article(title=a["title"], url=a["url"], data=a["data"]) for a in cache["data"]]
+                        print(f"Cache expired for {cache_file}, fetching fresh data")
                 except Exception as e:
                     print(f"Cache read error: {e}")
-                    cache = {"timestamp": datetime.now().isoformat(), "data": []}
 
-            # Get fresh data and cache it
-            data = func(self, *args, **kwargs)
+            # Cache expired or doesn't exist - try wrapped function
             try:
-                cache_path.parent.mkdir(exist_ok=True)
-                cache_data = [{"title": a.title, "url": str(a.url), "data": a.data} for a in data]
-                with cache_path.open("w") as f:
-                    json.dump({"timestamp": datetime.now().isoformat(), "data": cache_data}, f)
+                data = func(self, *args, **kwargs)
             except Exception as e:
-                print(f"Cache write error: {e}")
+                print(f"Get articles failed: {e}")
+                return []
+
+            # Only cache if we got data back
+            if data:
+                try:
+                    cache_path.parent.mkdir(exist_ok=True)
+                    cache_data = [{"title": a.title, "url": str(a.url), "data": a.data} for a in data]
+                    with cache_path.open("w") as f:
+                        json.dump({"timestamp": datetime.now().isoformat(), "data": cache_data}, f)
+                except Exception as e:
+                    print(f"Cache write error: {e}")
 
             return data
 
@@ -118,7 +128,10 @@ class Story(BaseModel):
     content: str
     image_prompt: str | None = None
     image_url: HttpUrl | None = None
-    social_image: bytes | None = None
+    screenshot: str | None = None
+    screenshot_url: HttpUrl | None = None
+    insta_post_url: HttpUrl | None = None
+    insta_reel_url: HttpUrl | None = None
     blog_url: HttpUrl = ""
     llm: str = ""
     markdown: str = ""
@@ -135,8 +148,8 @@ Image URL: {self.image_url}
 Source: {self.original_article.title}
 URL: {self.original_article.url}"""
 
-    def get_screenshot(self, padding: int = 40) -> bytes:
-        """Generate a screenshot of the story for social media."""
+    def get_screenshot(self, padding: int = 40) -> str:
+        """Generate a screenshot of the story for social media. Returns base64 string."""
         # Strip frontmatter and convert content to HTML
         content = self.markdown.split("---", 2)[-1]
         html = markdown.markdown(content)
@@ -166,10 +179,10 @@ URL: {self.original_article.url}"""
                         color: #333;
                     }
                     img {
-                        width: 100%;  /* Changed from max-width to width */
+                        width: 100%;
                         height: auto;
                         margin: 15px 0;
-                        display: block;  /* Ensures no inline spacing issues */
+                        display: block;
                     }
                 </style>
             </head>
@@ -197,9 +210,15 @@ URL: {self.original_article.url}"""
 
             # Set viewport to match content plus padding
             page.set_viewport_size({"width": viewport_width, "height": int(content_height + (padding * 2))})
-            image = page.screenshot(type="png")
+            # Use PNG with compression level 9 (max compression)
+            image = page.screenshot(type="png", omit_background=True, animations="disabled")
             browser.close()
-            return image
+
+            # Further compress to JPEG using PIL
+            img = Image.open(io.BytesIO(image))
+            output = io.BytesIO()
+            img.save(output, format="JPEG", optimize=True, quality=85)
+            return base64.b64encode(output.getvalue()).decode()
 
     def get_markdown(self) -> str:
         """Generate Jekyll-compatible markdown for the story"""
@@ -214,6 +233,113 @@ URL: {self.original_article.url}"""
             f'![Alt Text]({self.image_url} "{self.image_prompt}")\n\n{self.content}'
             f"\n\n---\n*AInspired by: [{self.original_article.title}]({self.original_article.url})*"
         )
+
+
+class AssetManager:
+    """Manages upload and cleanup of media assets"""
+
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._temporary_assets = []
+        return cls._instance
+
+    def __init__(self):
+        # Initialize only happens once due to singleton pattern
+        pass
+
+    def upload(self, data: Union[str, bytes], permanent: bool = False) -> str:
+        """Upload data to storage. Handles both URLs and raw data."""
+        upload_data = data if isinstance(data, bytes) else requests.get(data, timeout=10).content
+        result = cloudinary.uploader.upload(upload_data)
+
+        if not permanent:
+            self._temporary_assets.append(result["public_id"])
+
+        return result["secure_url"]
+
+    def create_instagram_image(self, url: str) -> str:
+        """Creates a 4:5 aspect ratio JPEG version for Instagram feed."""
+        try:
+            public_id = url.split("/")[-1].split(".")[0]
+            return cloudinary.CloudinaryImage(public_id).build_url(
+                transformation=[
+                    {"width": 1300, "height": 1300, "crop": "fill", "gravity": "north"},
+                    {"format": "jpg", "quality": "auto"},
+                ]
+            )
+        except Exception as e:
+            print(f"Instagram image creation failed: {e}")
+            return None
+
+    def create_instagram_reel(self, url: str) -> str:
+        """Creates a 30-second video version for Instagram Reels from static image."""
+        try:
+            if not self._ensure_blank_video_exists():
+                return None
+
+            public_id = url.split("/")[-1].split(".")[0]
+            return cloudinary.CloudinaryVideo("blank_video_30s").build_url(
+                transformation=[
+                    {
+                        "overlay": public_id,
+                        "width": 1010,
+                        "height": 1850,
+                        "crop": "fit",
+                        "background": "white",
+                        "x": 35,
+                        "y": 35,
+                        "flags": "layer_apply",
+                    }
+                ]
+            )
+        except Exception as e:
+            print(f"Instagram reel creation failed: {e}")
+            return None
+
+    def _ensure_blank_video_exists(self):
+        """Ensures the blank video exists on Cloudinary, creating it if needed."""
+        try:
+            # Check if video exists using explicit method
+            cloudinary.uploader.explicit("blank_video_30s", resource_type="video", type="upload")
+            return True
+        except cloudinary.exceptions.NotFound:
+            print("Blank video not found, creating...")
+
+            # Create temp video file
+            temp_path = Path("blank_video_30s.mp4")
+            try:
+                subprocess.run(
+                    ["ffmpeg", "-f", "lavfi", "-i", "color=c=white:s=1080x1920:d=30", str(temp_path)],
+                    check=True,
+                    capture_output=True,
+                )
+
+                # Upload to Cloudinary
+                cloudinary.uploader.upload(str(temp_path), public_id="blank_video_30s", resource_type="video")
+                temp_path.unlink()
+                return True
+
+            except Exception as e:
+                print(f"Failed to create blank video: {e}")
+                if temp_path.exists():
+                    temp_path.unlink()
+                return False
+        except Exception as e:
+            print(f"Unexpected error checking for blank video: {e}")
+            return False
+
+    def cleanup_temporary(self):
+        """Delete all temporary assets from current session"""
+        if self._temporary_assets:
+            try:
+                for asset_id in self._temporary_assets:
+                    cloudinary.uploader.destroy(asset_id)
+                self._temporary_assets.clear()
+            except Exception as e:
+                print(f"Failed to delete assets: {e}")
 
 
 class JekyllPublisher:
@@ -313,15 +439,15 @@ class TwitterPublisher:
         )
         self.api = tweepy.API(auth)
 
-    def upload_media(self, image_url=None, image_bytes=None):
+    def upload_media(self, image_url=None, image_base64=None):
         if image_url:
             response = requests.get(image_url, timeout=10)
             file = io.BytesIO(response.content)
-            response = self.api.media_upload(filename="story.png", file=file)
+            response = self.api.media_upload(filename="story.jpg", file=file)
             return response.media_id_string
-        elif image_bytes:
-            file = io.BytesIO(image_bytes)
-            response = self.api.media_upload(filename="story.png", file=file)
+        elif image_base64:
+            file = io.BytesIO(base64.b64decode(image_base64))
+            response = self.api.media_upload(filename="story.jpg", file=file)
             return response.media_id_string
         return None
 
@@ -330,8 +456,8 @@ class TwitterPublisher:
         post_url = f"https://www.thealium.com/{post_url}.html"
 
         # Try newspaper image style post first, fall back to regular image + URL
-        if story.social_image:
-            media_id = self.upload_media(image_bytes=story.social_image)
+        if story.screenshot:
+            media_id = self.upload_media(image_base64=story.screenshot)
             response = self.client.create_tweet(text=story.title, media_ids=[media_id] if media_id else None)
         else:
             media_id = self.upload_media(image_url=story.image_url)
@@ -351,14 +477,36 @@ class TwitterPublisher:
         return response
 
 
+class WebhookPublisher:
+    """Sends story data to a webhook endpoint"""
+
+    def __init__(self):
+        self.webhook_url = os.environ["MAKE_WEBHOOK_URL"]
+        self.asset_manager = AssetManager()  # Get singleton instance
+
+    def publish(self, story: Story):
+        # Get Instagram versions if we have a social image
+        if story.screenshot_url:
+            story.insta_post_url = self.asset_manager.create_instagram_image(story.screenshot_url)
+            story.insta_reel_url = self.asset_manager.create_instagram_reel(story.screenshot_url)
+
+        data = story.model_dump(mode="json")
+        response = requests.post(self.webhook_url, json=data, headers={"Content-Type": "application/json"}, timeout=10)
+        return response
+
+
 class MultiPublisher:
     """Handles publishing stories across multiple platforms"""
 
     def __init__(self):
-        self.publishers = [JekyllPublisher(), TwitterPublisher()]
+        self.asset_manager = AssetManager()  # Get singleton instance
+        self.publishers = [JekyllPublisher(), TwitterPublisher(), WebhookPublisher()]
+        # No need to pass asset_manager around
 
     def publish_story(self, story: Story):
-        return [publisher.publish(story) for publisher in self.publishers]
+        responses = [publisher.publish(story) for publisher in self.publishers]
+        self.asset_manager.cleanup_temporary()
+        return responses
 
     @property
     def golden_source(self) -> JekyllPublisher:
@@ -450,18 +598,9 @@ class TwitterTrendsSource(NewsSource):
 
     @cache_articles(".cache/twitter_trends.json")
     def get_articles(self, n_articles) -> list[Article | None]:
-        try:
-            response = self.client._make_request("GET", "/2/users/personalized_trends", user_auth=True)
-        except tweepy.errors.TooManyRequests:
-            print("Twitter API rate limit exceeded")
+        response = self.client._make_request("GET", "/2/users/personalized_trends", user_auth=True)
+        if not response or not response.data:
             return []
-        except Exception as e:
-            print(f"Twitter API error: {e}")
-            return []
-
-        if not response.data:
-            return []
-
         # Check for non-premium response pattern
         if len(response.data) == 1 and response.data[0].get("post_count") == "Unknown":
             print("Warning: Non-premium Twitter response received")
@@ -472,23 +611,22 @@ class TwitterTrendsSource(NewsSource):
         for trend in response.data:
             post_count = self._parse_post_count(trend["post_count"])
             if post_count >= self.min_posts:  # Filter out low-engagement trends
-                articles.append(
-                    (
-                        post_count,
-                        Article(
-                            title=trend["trend_name"],
-                            url=f"https://twitter.com/search?q={trend['trend_name']}",
-                            data={
-                                "post_count": post_count,
-                                "category": trend.get("category"),
-                                "source": "twitter_trend",
-                            },
-                        ),
-                    )
+                article = Article(
+                    title=trend["trend_name"],
+                    url=f"https://twitter.com/search?q={trend['trend_name']}",
+                    data={
+                        "post_count": post_count,
+                        "category": trend.get("category"),
+                        "source": "twitter_trend",
+                    },
                 )
+                articles.append(article)
 
-        # Sort by post_count and return just the Article objects
-        return [article for _, article in sorted(articles, reverse=True)][:n_articles]
+        # Sort articles by post_count in descending order
+        articles.sort(key=lambda article: article.data["post_count"], reverse=True)
+
+        # Return the top n_articles
+        return articles[:n_articles]
 
 
 class TwitterMentionsSource(NewsSource):
@@ -544,8 +682,9 @@ class TwitterMentionsSource(NewsSource):
 class StoryEditor:
     """Edits articles into stories"""
 
-    def __init__(self):
-        pass
+    def __init__(self, test_mode: bool = False):
+        self.asset_manager = AssetManager()
+        self.test_mode = test_mode
 
     def generate_story(
         self, article: Article, model="gpt-4o-mini", image_quality="standard", metadata=None, editor=False
@@ -604,9 +743,8 @@ class StoryEditor:
                 n=1,
                 response_format="b64_json",
             )
-            # Convert base64 to URL by uploading to Cloudinary
             image_data = base64.b64decode(response.data[0].b64_json)
-            story.image_url = cloudinary.uploader.upload(image_data)["secure_url"]
+            story.image_url = self.asset_manager.upload(image_data, permanent=not self.test_mode)
         else:
             response = litellm.image_generation(
                 prompt=image_prompt,
@@ -616,11 +754,15 @@ class StoryEditor:
                 quality=image_quality,
                 metadata=metadata,
             )
-            story.image_url = cloudinary.uploader.upload(response.data[0].url)["secure_url"]
+            story.image_url = self.asset_manager.upload(response.data[0].url, permanent=not self.test_mode)
 
-        # Generate markdown & screenshot
+        # Generate markdown, screenshot & temporary asset
         story.markdown = story.get_markdown()
-        story.social_image = story.get_screenshot()
+        story.screenshot = story.get_screenshot()
+        if story.screenshot:
+            image_data = base64.b64decode(story.screenshot)
+            story.screenshot_url = self.asset_manager.upload(image_data)
+
         return story
 
     @staticmethod
@@ -670,23 +812,14 @@ def _generate_and_publish_stories(test_mode: bool = False):
     }
 
     # Fetch titles of the articles recently edited into stories
-    print("Getting existing titles from past 3 months...")
+    print("Getting existing article titles from past 3 months...")
     publisher = MultiPublisher()
     existing_titles = publisher.golden_source.get_recent_article_titles(months_ago=3)
 
-    # Source articles to base stories on
-    articles = []
-    # First check Twitter mentions
-    # TODO: Enable once figure out how to do within free tier
-    # print("Checking for Twitter mentions...")
-    # mentions_source = TwitterMentionsSource(test_mode=test_mode)
-    # articles = mentions_source.get_novel_articles(1, existing_titles, similarity_threshold)
-
-    # If no Twitter mentions, check Twitter trends
-    if not articles:
-        print("Checking Twitter trends...")
-        trends_source = TwitterTrendsSource(test_mode=test_mode)
-        articles = trends_source.get_novel_articles(1, existing_titles, similarity_threshold)
+    # Source articles to base stories on from Personalised Twitter trends
+    print("Checking Twitter trends...")
+    trends_source = TwitterTrendsSource(test_mode=test_mode)
+    articles = trends_source.get_novel_articles(1, existing_titles, similarity_threshold)
 
     # If no Twitter articles, fall back to Metaphor
     if not articles:
@@ -707,11 +840,14 @@ def _generate_and_publish_stories(test_mode: bool = False):
         if story and not test_mode:
             print("Publishing story...")
             publisher.publish_story(story)
-        elif test_mode:
-            Path("story_example.png").write_bytes(story.social_image)
+        elif test_mode and story:
+            print("Test mode: Publishing to webhook only...")
+            webhook = WebhookPublisher()
+            webhook.publish(story)
+            Path("story_example.jpg").write_bytes(base64.b64decode(story.screenshot))
 
 
-# To test fully locally (no modal - requires .env file): poetry run python server.py
+# To test fully locally (no modal - requires .env file): uv run python server.py
 # To test in a remote modal container: modal run server.py
 # To publish stories manually: modal run server.py::generate_and_publish_stories
 # To deploy on the schedule: modal deploy server.py
