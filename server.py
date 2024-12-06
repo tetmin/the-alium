@@ -841,9 +841,6 @@ def _generate_and_publish_stories(test_mode: bool = False):
             print("Publishing story...")
             publisher.publish_story(story)
         elif test_mode and story:
-            print("Test mode: Publishing to webhook only...")
-            webhook = WebhookPublisher()
-            webhook.publish(story)
             Path("story_example.jpg").write_bytes(base64.b64decode(story.screenshot))
 
 
