@@ -5,8 +5,8 @@ image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1733493709/salx9ozt8y9
 llm: claude-3-5-sonnet-20241022
 source_url: https://twitter.com/search?q=SDF%20Control%20Shifts%20in%20Deir%20ez-Zor
 source_title: SDF Control Shifts in Deir ez-Zor
-source_url: {{ page.source_url }}
-source_title: "{{ page.source_title }}"
+source_url: https://twitter.com/search?q=SDF%20Control%20Shifts%20in%20Deir%20ez-Zor
+source_title: "SDF Control Shifts in Deir ez-Zor"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1733493709/salx9ozt8y9supeeu8tv.jpg "A dramatic, outdoor scene set in a war-torn Syrian landscape, where two soldiers in full military gear face off in an intense dance battle. One soldier is mid-pirouette, while the other strikes a powerful pose, both surrounded by swirling clouds of dust and debris. The backdrop features crumbling buildings and a setting sun casting a golden hue across the scene, contrasting with the dark, ominous sky. Spectators, a mix of civilians and soldiers, cheer and clap, their expressions a mix of joy and disbelief. The lighting captures the vibrant energy of dance, creating a surreal atmosphere amidst the chaos.")
 
