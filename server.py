@@ -104,6 +104,9 @@ class Article(BaseModel):
     title: str
     url: HttpUrl
     data: dict
+    sensitive: bool = False
+    sensitive_reason: str | None = None
+    flagged: bool = False
 
     @classmethod
     def from_metaphor(cls, article_data):
@@ -114,9 +117,9 @@ class Article(BaseModel):
         )
 
     @staticmethod
-    def get_embeddings(texts):
+    def get_embeddings(texts, model="text-embedding-ada-002"):
         """Utility function to batch embed input texts for similarity comparisons"""
-        response = litellm.embedding(model="text-embedding-3-small", input=texts)
+        response = litellm.embedding(model=model, input=texts)
         return [item["embedding"] for item in response.data]
 
 
@@ -504,43 +507,105 @@ class MultiPublisher:
         # No need to pass asset_manager around
 
     def publish_story(self, story: Story):
+        print("Publishing story...")
         responses = [publisher.publish(story) for publisher in self.publishers]
         self.asset_manager.cleanup_temporary()
+        print("Published to all platforms")
         return responses
 
     @property
     def golden_source(self) -> JekyllPublisher:
         return next(p for p in self.publishers if isinstance(p, JekyllPublisher))
 
+class ContentFilter(BaseModel):
+    is_sensitive: bool
+    reason: str | None = None
+
+class ContentFilterList(BaseModel):
+    content_filters: list[ContentFilter]
 
 class NewsSource:
     """Base class for news sources. Implements get_articles and returns a list of Article instances."""
 
+    sort_by_similarity: bool = True  # Default to sorting
+
     def get_articles(self, n_articles) -> list[Article | None]:
         raise NotImplementedError
 
-    def get_novel_articles(self, n_articles, existing_titles, similarity_threshold=0.9) -> list[Article | None]:
+    def get_novel_articles(self, n_articles, existing_titles, similarity_threshold=0.9, metadata=None) -> list[Article | None]:
         articles = self.get_articles(n_articles * 10)
-        article_titles = [article.title for article in articles if article.title]
+        
+        # Filter out sensitive and moderated articles
+        articles = self._filter_sensitive_content(articles, metadata=metadata)
+        filtered_articles = [a for a in articles if not a.sensitive]
+        filtered_titles = [a.title for a in filtered_articles]
 
-        if not article_titles or not existing_titles:
-            return articles[:n_articles]
+        if not filtered_articles or not existing_titles:
+            return filtered_articles[:n_articles]
 
-        all_titles = article_titles + existing_titles
+        # Continue with similarity checking on filtered articles
+        all_titles = filtered_titles + existing_titles
         embeddings = Article.get_embeddings(all_titles)
         article_embeddings, existing_embeddings = (
-            np.array(embeddings[: len(article_titles)]),
-            np.array(embeddings[len(article_titles) :]),
+            np.array(embeddings[: len(filtered_titles)]),
+            np.array(embeddings[len(filtered_titles) :]),
         )
 
         similarities = cosine_similarity(article_embeddings, existing_embeddings)
+        # Get similarity to the most similar existing article
         max_similarities = np.max(similarities, axis=1)
 
-        sorted_indices = np.argsort(max_similarities)  # ascending order (least similar first)
-        novel_articles = [articles[i] for i in sorted_indices if max_similarities[i] <= similarity_threshold][
-            :n_articles
-        ]
+        if self.sort_by_similarity:
+            sorted_indices = np.argsort(max_similarities)
+            novel_articles = [filtered_articles[i] for i in sorted_indices if max_similarities[i] <= similarity_threshold][:n_articles]
+        else:
+            novel_indices = np.where(max_similarities <= similarity_threshold)[0]
+            novel_articles = [filtered_articles[i] for i in novel_indices][:n_articles]
         return novel_articles
+    
+    def _filter_sensitive_content(self, articles: list[Article], metadata: dict = None) -> list[Article]:
+        """Marks articles as sensitive if they contain sensitive content or fail moderation"""
+        messages = [
+            {
+                "role": "system",
+                "content": "You analyze news headlines to determine if they are about extremely sensitive topics like disasters, war, murder, terrorism, or other tragic events."
+            },
+            {
+                "role": "user", 
+                "content": f"For each headline, determine if it is about an extremely sensitive topic. Headlines: {[a.title for a in articles]}"
+            }
+        ]
+        
+        try:
+            # Content sensitivity check
+            response = litellm.completion(
+                model="gpt-4o-mini",
+                messages=messages,
+                response_format=ContentFilterList,
+                temperature=0,
+                max_tokens=1024,
+                metadata=metadata,
+            )
+            content = response.choices[0].message.content
+            results = ContentFilterList.model_validate_json(content).content_filters
+            # Batch moderation check
+            titles = [a.title for a in articles]
+            moderation_response = litellm.moderation(input=titles, model="omni-moderation-latest", metadata=metadata)
+            # Update articles with both content and moderation results
+            for article, result, mod_result in zip(articles, results, moderation_response.results):
+                article.sensitive = result.is_sensitive
+                article.sensitive_reason = result.reason
+                
+                # Add moderation result
+                article.flagged = mod_result.flagged
+                if article.flagged:
+                    article.sensitive = True
+                    article.sensitive_reason = "Failed moderation check"
+            
+            return articles
+        except Exception as e:
+            print(f"Content filtering failed: {e}")
+            return articles  # Return unmodified if filtering fails
 
 
 class MetaphorSource(NewsSource):
@@ -584,6 +649,7 @@ class TwitterTrendsSource(NewsSource):
             access_token=os.environ["X_PREMIUM_ACCESS_TOKEN"],
             access_token_secret=os.environ["X_PREMIUM_ACCESS_TOKEN_SECRET"],
         )
+        self.sort_by_similarity = False  # Override to disable sorting
 
     def _parse_post_count(self, count_str: str) -> float:
         """Convert strings like '32K posts' or '1.9B posts' to numbers"""
@@ -605,7 +671,9 @@ class TwitterTrendsSource(NewsSource):
         if len(response.data) == 1 and response.data[0].get("post_count") == "Unknown":
             print("Warning: Non-premium Twitter response received")
             return []
-
+        
+        # TODO: Remove once have remote caching
+        print(response)
         # Parse and sort trends by post_count
         articles = []
         for trend in response.data:
@@ -689,11 +757,7 @@ class StoryEditor:
     def generate_story(
         self, article: Article, model="gpt-4o-mini", image_quality="standard", metadata=None, editor=False
     ) -> Story | None:
-        # Check for article title moderation issues & write a story
-        if self._get_moderation_flag(article.title):
-            print(f"Moderation issue with the LLM proposed story title: {article.title}")
-            return None
-
+        # Remove article title moderation check since it's now done in NewsSource
         STORY_PROMPT = self.load_prompt(
             "story",
             news_headline_to_write_satirical_version_of=article.title,
@@ -725,7 +789,7 @@ class StoryEditor:
         messages = [{"role": "user", "content": IMAGE_PROMPT}]
         response = litellm.completion(model="gpt-4o-mini", messages=messages, temperature=0.7, metadata=metadata)
         image_prompt = self.extract_between_tags("image_prompt", response.choices[0].message.content, strip=True)[0]
-        if self._get_moderation_flag(image_prompt):
+        if self._get_moderation_flag(image_prompt, metadata):
             print(f"Image prompt failed moderation: {image_prompt}")
             return None
         story.image_prompt = image_prompt
@@ -743,8 +807,7 @@ class StoryEditor:
                 n=1,
                 response_format="b64_json",
             )
-            image_data = base64.b64decode(response.data[0].b64_json)
-            story.image_url = self.asset_manager.upload(image_data, permanent=not self.test_mode)
+            image = base64.b64decode(response.data[0].b64_json)
         else:
             response = litellm.image_generation(
                 prompt=image_prompt,
@@ -754,14 +817,18 @@ class StoryEditor:
                 quality=image_quality,
                 metadata=metadata,
             )
-            story.image_url = self.asset_manager.upload(response.data[0].url, permanent=not self.test_mode)
+            image = response.data[0].url
+        
+        # Has to be permanent as used in Jekyll blog
+        story.image_url = self.asset_manager.upload(image, permanent=not self.test_mode)
 
-        # Generate markdown, screenshot & temporary asset
+        # Generate markdown, render page, screenshot & store asset
         story.markdown = story.get_markdown()
         story.screenshot = story.get_screenshot()
         if story.screenshot:
             image_data = base64.b64decode(story.screenshot)
-            story.screenshot_url = self.asset_manager.upload(image_data)
+            # TODO: This is only permanent because webhook takes time to complete & image is needed for that
+            story.screenshot_url = self.asset_manager.upload(image_data, permanent=not self.test_mode)
 
         return story
 
@@ -789,8 +856,8 @@ class StoryEditor:
         return title, content
 
     @staticmethod
-    def _get_moderation_flag(prompt):
-        response = litellm.moderation(input=prompt, model="omni-moderation-latest")
+    def _get_moderation_flag(prompt, metadata=None):
+        response = litellm.moderation(input=prompt, model="omni-moderation-latest", metadata=metadata)
         return response.results[0].flagged
 
 
@@ -812,20 +879,20 @@ def _generate_and_publish_stories(test_mode: bool = False):
     }
 
     # Fetch titles of the articles recently edited into stories
-    print("Getting existing article titles from past 3 months...")
+    print("Getting recent article titles...")
     publisher = MultiPublisher()
-    existing_titles = publisher.golden_source.get_recent_article_titles(months_ago=3)
+    existing_titles = publisher.golden_source.get_recent_article_titles(months_ago=1)
 
     # Source articles to base stories on from Personalised Twitter trends
     print("Checking Twitter trends...")
     trends_source = TwitterTrendsSource(test_mode=test_mode)
-    articles = trends_source.get_novel_articles(1, existing_titles, similarity_threshold)
+    articles = trends_source.get_novel_articles(1, existing_titles, similarity_threshold, metadata=metadata)
 
     # If no Twitter articles, fall back to Metaphor
     if not articles:
         metaphor_source = MetaphorSource(METAPHOR_QUERY)
         print(f"No Twitter articles, fetching from Metaphor about '{metaphor_source.query}'...")
-        articles = metaphor_source.get_novel_articles(1, existing_titles, similarity_threshold)
+        articles = metaphor_source.get_novel_articles(1, existing_titles, similarity_threshold, metadata=metadata)
 
     print(f"Found {len(articles)} articles to process")
 
@@ -838,7 +905,6 @@ def _generate_and_publish_stories(test_mode: bool = False):
 
         # Publish if not in test mode and story generation succeeded
         if story and not test_mode:
-            print("Publishing story...")
             publisher.publish_story(story)
         elif test_mode and story:
             Path("story_example.jpg").write_bytes(base64.b64decode(story.screenshot))
