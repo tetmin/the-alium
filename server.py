@@ -117,9 +117,9 @@ class Article(BaseModel):
         )
 
     @staticmethod
-    def get_embeddings(texts):
+    def get_embeddings(texts, model="text-embedding-ada-002"):
         """Utility function to batch embed input texts for similarity comparisons"""
-        response = litellm.embedding(model="text-embedding-3-small", input=texts)
+        response = litellm.embedding(model=model, input=texts)
         return [item["embedding"] for item in response.data]
 
 
