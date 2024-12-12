@@ -3,6 +3,8 @@ title: "Local News AI Enters Therapy After Developing Anxiety Over Oxford Comma 
 date: 2024-12-11 14:01:33 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1733925693/xywndznjfhfyzhrow9tt.jpg
 llm: claude-3-5-sonnet-20241022
+source_url: https://www.niemanlab.org/2024/12/ai-adoption-matures-in-small-and-local-newsrooms/
+source_title: "AI adoption matures in small and local newsrooms"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1733925693/xywndznjfhfyzhrow9tt.jpg "A whimsical therapist's office featuring a plush, oversized armchair in a calming pastel color. Sitting in the chair is a cartoonish, anthropomorphic AI character with expressive eyes, looking anxiously at a floating, oversized Oxford comma hovering in the air in front of it. The room is softly lit with warm, inviting light, and the walls are adorned with abstract art depicting various punctuation marks. A small coffee table beside the armchair holds a notepad and a cup of herbal tea, adding to the cozy atmosphere. The photographic style is bright and cheerful, emphasizing the quirky nature of the scene.")
 
@@ -19,4 +21,6 @@ The newspaper's IT department confirmed that NewsBot has been displaying symptom
 The newspaper plans to return NewsBot to service once it completes its therapeutic journey, though concerns remain about its recent tendency to end every story with "In these uncertain times..."
 
 ---
-*AInspired by: [AI adoption matures in small and local newsrooms](https://www.niemanlab.org/2024/12/ai-adoption-matures-in-small-and-local-newsrooms/)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*
