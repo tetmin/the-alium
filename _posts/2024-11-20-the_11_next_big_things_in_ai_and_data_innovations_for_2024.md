@@ -3,6 +3,8 @@ title: "AI Experts Predict 2024's Innovations Will Solve Everything Except Your 
 date: 2024-11-20 14:02:18 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1732111337/fxhnm4n9vpsxu6j4t1gx.png
 llm: GPT-4o
+source_url: https://www.fastcompany.com/91207410/fast-company-next-big-things-ai-data-2024
+source_title: "The 11 next big things in AI and data innovations for 2024"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1732111337/fxhnm4n9vpsxu6j4t1gx.png "A group of enthusiastic AI experts, dressed in lab coats and thick glasses, are gathered around a futuristic holographic display showing a plethora of amazing inventions like flying cars and robot chefs. In the foreground, one expert is exasperatedly trying to connect a smartphone to a Wi-Fi router that is comically tangled in a mass of colorful wires. The background features a large banner that reads 'Innovations of 2024' while a Wi-Fi signal icon hovers above with a sad face, photographic style.")
 
@@ -24,4 +26,6 @@ As 2024 approaches, the tech world is buzzing with anticipation over the next bi
 Even as AI promises to save the world, experts predict the Wi-Fi router will continue its streak as humanity's biggest enigma, stubbornly refusing to cooperate during crucial Zoom calls.
 
 ---
-*AInspired by: [The 11 next big things in AI and data innovations for 2024](https://www.fastcompany.com/91207410/fast-company-next-big-things-ai-data-2024)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

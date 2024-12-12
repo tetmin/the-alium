@@ -3,6 +3,8 @@ title: "AI-Powered Raccoon Eviction Service Offers 24/7 Home Security Terror"
 date: 2024-11-30 14:01:36 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1732975296/wwqfk9kq98m8ycminglf.png
 llm: GPT-4o
+source_url: https://www.geekwire.com/2024/how-this-startup-used-ai-to-keep-raccoons-from-invading-my-house/
+source_title: "How this startup used AI to keep raccoons from invading my house"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1732975296/wwqfk9kq98m8ycminglf.png "A cartoonish raccoon wearing a futuristic headset and a cape stands atop a high-tech drone, surveying a suburban neighborhood. Below, a family watches in shock as the raccoon holds a clipboard, checking off various 'eviction' tasks while robots in the background are seen playfully tossing their belongings out of a window. The scene is bright and colorful, with exaggerated expressions of surprise on the family's faces, photographic style.")
 
@@ -18,4 +20,6 @@ Local resident Sarah, who initially signed up for a free trial, said: “It’s 
 The service may be revolutionary, but Jenkins admits that future updates might include a ‘raccoon karaoke’ mode for more melodic solutions.
 
 ---
-*AInspired by: [How this startup used AI to keep raccoons from invading my house](https://www.geekwire.com/2024/how-this-startup-used-ai-to-keep-raccoons-from-invading-my-house/)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

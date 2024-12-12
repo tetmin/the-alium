@@ -3,6 +3,8 @@ title: "MicroStrategy Converts to Church of Latter-Day Satoshi, Declares Bitcoin
 date: 2024-12-02 23:40:47 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1733182847/be4z9nutfk1tgztc7lfg.jpg
 llm: claude-3-5-sonnet-20241022
+source_url: https://twitter.com/search?q=MicroStrategy%27s%20$42%20Billion%20Bitcoin%20Investment
+source_title: "MicroStrategy's $42 Billion Bitcoin Investment"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1733182847/be4z9nutfk1tgztc7lfg.jpg "A group of enthusiastic crypto-evangelists dressed in futuristic robes stands around a large, glowing Bitcoin symbol that resembles a pulpit. They hold up glowing tablets displaying Bitcoin scripture while a congregation of people in casual attire looks on in awe, some taking notes. In the background, a stained-glass window features Satoshi Nakamoto depicted as a divine figure, casting light on the scene, photographic style.")
 
@@ -15,4 +17,6 @@ The company's Maryland headquarters has been converted into a temple of blockcha
 The company's new spiritual direction has raised eyebrows among investors, particularly after announcing plans to replace the annual Christmas party with a "Bitcoin Halving Ceremony" where employees sacrifice their fiat currencies to the crypto gods.
 
 ---
-*AInspired by: [MicroStrategy's $42 Billion Bitcoin Investment](https://twitter.com/search?q=MicroStrategy%27s%20$42%20Billion%20Bitcoin%20Investment)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

@@ -3,6 +3,8 @@ title: "OpenAI Puts Large Language Models Through Trials of Pub Quizzes, Awkward
 date: 2024-11-24 14:01:50 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1732456909/zsxc2xrcrotws8xgjgd2.png
 llm: GPT-4o
+source_url: https://www.technologyreview.com/2024/11/21/1107158/how-openai-stress-tests-its-large-language-models/
+source_title: "How OpenAI stress-tests its large language models"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1732456909/zsxc2xrcrotws8xgjgd2.png "A comical scene depicting a group of large language model avatars, each resembling quirky cartoon characters, sitting at a long pub table cluttered with snack bowls and drinks. One avatar is confidently answering a trivia question from a quizmaster robot, while another nervously engages in small talk, fidgeting with its drink. In the background, a TV screen shows an endless loop of a binge-watching series with popcorn flying as one avatar laughs too hard. The pub is decorated with humorous posters about AI and language, photographic style.")
 
@@ -20,4 +22,6 @@ In another particularly grueling exercise, the AI participated in a pub quiz nig
 OpenAI assures us that, despite these trials, their language models remain surprisingly sane. For now.
 
 ---
-*AInspired by: [How OpenAI stress-tests its large language models](https://www.technologyreview.com/2024/11/21/1107158/how-openai-stress-tests-its-large-language-models/)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

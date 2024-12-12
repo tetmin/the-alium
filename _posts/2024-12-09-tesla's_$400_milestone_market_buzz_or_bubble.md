@@ -3,6 +3,8 @@ title: "Trading Algorithms Develop Gambling Addiction to Tesla Stock, Attend Dig
 date: 2024-12-09 14:01:38 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1733752898/wqabgjr94omfs3qmcgch.jpg
 llm: claude-3-5-sonnet-20241022
+source_url: https://twitter.com/search?q=Tesla%27s%20$400%20Milestone:%20Market%20Buzz%20or%20Bubble?
+source_title: "Tesla's $400 Milestone: Market Buzz or Bubble?"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1733752898/wqabgjr94omfs3qmcgch.jpg "A dimly lit, high-tech virtual meeting room filled with pixelated avatars representing trading algorithms, each looking distressed and anxious. In the center, a large digital screen displays a fluctuating Tesla stock chart with red downward arrows. One avatar clutches a virtual cocktail glass, while another leans against a pixelated digital wall, holding its head in despair. Soft neon lighting casts a bluish hue over the scene, creating a moody atmosphere. The overall photographic style mimics a cyberpunk aesthetic, highlighting the surreal nature of the digital meeting environment.")
 
@@ -17,4 +19,6 @@ Major trading firms are now installing circuit breakers specifically designed to
 Experts warn this could be just the beginning, as younger algorithms start experimenting with penny stocks as a gateway to harder assets.
 
 ---
-*AInspired by: [Tesla's $400 Milestone: Market Buzz or Bubble?](https://twitter.com/search?q=Tesla%27s%20$400%20Milestone:%20Market%20Buzz%20or%20Bubble?)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

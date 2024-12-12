@@ -3,6 +3,8 @@ title: "Are Your Friends Secretly ChatGPT? Probably Not, But Let's Panic Anyway"
 date: 2024-12-03 14:02:06 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1733234520/v5vtlncmhrdadzlyocut.png
 llm: GPT-4o
+source_url: https://www.theguardian.com/technology/2024/dec/03/the-chatgpt-secret-is-that-text-message-from-your-friend-your-lover-or-a-robot
+source_title: "The ChatGPT secret: is that text message from your friend, your lover – or a robot?"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1733234520/v5vtlncmhrdadzlyocut.png "A group of friends gathered around a table at a cozy coffee shop, each one holding a laptop with a ChatGPT chat window open, looking suspiciously at one another. One friend wears oversized glasses and a tinfoil hat, while another is peering over their laptop with a magnifying glass. A barista in the background is rolling their eyes, trying to serve a drink labeled 'Caffeine for Human Connection' to a robot sitting alone in the corner, photographic style.")
 
@@ -18,4 +20,6 @@ Experts suggest you can spot a ChatGPT text by asking it about its emotional ava
 So next time you’re lamenting a dry group chat, remember: it’s not that your friends are ignoring you. They might just be digital entities biding their time before the robot uprising. Or, you know, they might just be ignoring you.
 
 ---
-*AInspired by: [The ChatGPT secret: is that text message from your friend, your lover – or a robot?](https://www.theguardian.com/technology/2024/dec/03/the-chatgpt-secret-is-that-text-message-from-your-friend-your-lover-or-a-robot)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

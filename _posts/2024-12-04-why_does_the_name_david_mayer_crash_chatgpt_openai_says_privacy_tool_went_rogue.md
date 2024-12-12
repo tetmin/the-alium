@@ -3,6 +3,8 @@ title: "AI Develops Social Anxiety, Refuses to Say Certain Names Without Safe Sp
 date: 2024-12-04 15:07:59 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1733324878/dwp4imvso2j6j5ach9kh.jpg
 llm: claude-3-5-sonnet-20241022
+source_url: https://techcrunch.com/2024/12/03/why-does-the-name-david-mayer-crash-chatgpt-digital-privacy-requests-may-be-at-fault/
+source_title: "Why does the name ‘David Mayer’ crash ChatGPT? OpenAI says privacy tool went rogue"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1733324878/dwp4imvso2j6j5ach9kh.jpg "A futuristic, sleek AI interface resembling a humanoid robot sits nervously in a cozy, softly lit room filled with plush cushions and soothing decor. The robot's face shows a subtle frown, its digital eyes glancing sideways as it huddles next to a large, colorful “safe space” sign made of soft materials. A gentle light emanates from a nearby lamp, casting warm shadows that enhance the comforting atmosphere. The walls are adorned with abstract art that evokes calmness, while a small potted plant sits on a table beside the robot, adding a touch of life to the scene. The overall photographic style is intimate and inviting, capturing the essence of anxiety in a high-tech world.")
 
@@ -17,4 +19,6 @@ OpenAI has implemented digital exposure therapy, gradually introducing their AI 
 "At this rate," Dr. Binary adds, "we'll need to rename half the human population to emojis just to keep the internet running."
 
 ---
-*AInspired by: [Why does the name ‘David Mayer’ crash ChatGPT? OpenAI says privacy tool went rogue](https://techcrunch.com/2024/12/03/why-does-the-name-david-mayer-crash-chatgpt-digital-privacy-requests-may-be-at-fault/)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

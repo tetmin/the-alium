@@ -3,6 +3,8 @@ title: "AI Startup Joins Exclusive Club of Companies Confidently Pretending They
 date: 2024-12-01 14:02:00 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1733061719/yjq2ffjx1gqywghqvu9z.png
 llm: GPT-4o
+source_url: https://techcrunch.com/2024/11/29/as-cohere-and-writer-mine-the-live-ai-arena-pathway-joins-the-pack-with-a-10m-round/
+source_title: "As Cohere and Writer mine the ‘Live AI’ arena, Pathway joins the pack with a $10M round"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1733061719/yjq2ffjx1gqywghqvu9z.png "A group of stylized robots in business suits stands proudly in front of an oversized, gleaming door labeled 'The Exclusive Club of All Answers.' The robots are posing for a photo, holding a golden trophy shaped like a question mark. Behind them, a giant chalkboard filled with scribbled equations, doodles, and ridiculous to-do lists is barely visible. A banner overhead reads 'Confidence is Key!' while a few puzzled humans peer in from the side, scratching their heads, photographic style.")
 
@@ -18,4 +20,6 @@ Investors, typically known for their due diligence, were reportedly so dazzled b
 Meanwhile, the public remains on the edge of their seats, eagerly awaiting the day when they’ll understand what any of these companies actually do, other than securing large sums of money and hosting futuristic TED talks.
 
 ---
-*AInspired by: [As Cohere and Writer mine the ‘Live AI’ arena, Pathway joins the pack with a $10M round](https://techcrunch.com/2024/11/29/as-cohere-and-writer-mine-the-live-ai-arena-pathway-joins-the-pack-with-a-10m-round/)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

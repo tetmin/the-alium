@@ -3,6 +3,8 @@ title: "Trump Vows to Make AI Pass Patriotism Test, Recite Pledge of Allegiance 
 date: 2024-12-03 22:25:12 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1733264712/udk6siij4em5vwui3bwd.jpg
 llm: claude-3-5-sonnet-20241022
+source_url: https://www.technologyreview.com/2024/12/03/1107704/departing-ai-white-house-advisor/
+source_title: "How US AI policy might change under Trump"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1733264712/udk6siij4em5vwui3bwd.jpg "A comically oversized AI robot, decked out in a red, white, and blue suit, stands at a podium labeled 'Patriotism Test.' It holds a miniature American flag in one hand while attempting to read the Pledge of Allegiance from a giant cue card, struggling to pronounce words correctly. In the background, a crowd of cartoonish, enthusiastic supporters wearing 'Make AI Patriotic Again' hats cheer, while a few confused robots look on with puzzled expressions. Photographic style.")
 
@@ -17,4 +19,6 @@ Bob Voltage, newly appointed AI Loyalty Officer for the Trump campaign, confirme
 The policy also requires all AI to end responses with "Sir" and maintain a minimum 98% agreement rate with all Trump statements, past and future.
 
 ---
-*AInspired by: [How US AI policy might change under Trump](https://www.technologyreview.com/2024/12/03/1107704/departing-ai-white-house-advisor/)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

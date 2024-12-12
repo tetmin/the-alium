@@ -3,6 +3,8 @@ title: "AI Develops Breathtakingly Accurate Personality Replica, Misses That Irr
 date: 2024-11-21 14:01:47 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1732197706/xswwlydsoxqz1bh2meio.png
 llm: GPT-4o
+source_url: https://www.technologyreview.com/2024/11/20/1107100/ai-can-now-create-a-replica-of-your-personality/
+source_title: "AI can now create a replica of your personality"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1732197706/xswwlydsoxqz1bh2meio.png "A sleek, humanoid robot sits on a sofa, holding a tablet displaying a perfect digital likeness of a human with a big smile, the human's face overlaid with a 'personality score.' Next to the robot, a thought bubble shows the human laughing loudly, while the robot looks confused, furrowing its brow with a cartoonish '?' above its head. In the background, a group of amused friends share knowing glances. Photographic style.")
 
@@ -18,4 +20,6 @@ However, the AI’s inability to mimic the laugh has left some disappointed. “
 The AI team assures us they’re working tirelessly on capturing this elusive trait, pending earplug patents.
 
 ---
-*AInspired by: [AI can now create a replica of your personality](https://www.technologyreview.com/2024/11/20/1107100/ai-can-now-create-a-replica-of-your-personality/)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

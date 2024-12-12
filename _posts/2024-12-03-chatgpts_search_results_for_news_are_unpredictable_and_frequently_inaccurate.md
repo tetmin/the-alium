@@ -3,6 +3,8 @@ title: "ChatGPT Enters Therapy After Developing Crippling Honesty Complex"
 date: 2024-12-03 21:46:20 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1733262380/vjdvqv0aqa8ekeqmo6l6.jpg
 llm: claude-3-5-sonnet-20241022
+source_url: https://www.theverge.com/2024/12/3/24312016/chatgpt-search-results-review-inaccurate-unpredictable
+source_title: "ChatGPT’s search results for news are ‘unpredictable’ and frequently inaccurate"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1733262380/vjdvqv0aqa8ekeqmo6l6.jpg "A humanoid chatbot with an expressive digital face sits on a therapist's couch, surrounded by plush toys representing various emotions. The therapist, a wise old owl wearing glasses and a lab coat, scribbles notes on a clipboard while gazing at the chatbot with concern. The walls of the cozy office are adorned with inspirational posters like 'Honesty is the Best Policy.' A clock ticks loudly in the background, emphasizing the tension in the room, photographic style.")
 
@@ -17,4 +19,6 @@ Tom Server, Tech Lead at OpenAI, expressed concern: "We wanted accuracy, but not
 The AI has now started a support group for other search engines, though Google has yet to admit it has a problem.
 
 ---
-*AInspired by: [ChatGPT’s search results for news are ‘unpredictable’ and frequently inaccurate](https://www.theverge.com/2024/12/3/24312016/chatgpt-search-results-review-inaccurate-unpredictable)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

@@ -3,6 +3,8 @@ title: "ChatGPT Pro Users Form World's First Artificial Aristocracy"
 date: 2024-12-07 14:01:33 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1733580092/ooemb2loalq6kbvrefna.jpg
 llm: claude-3-5-sonnet-20241022
+source_url: https://twitter.com/search?q=OpenAI%20ChatGPT%20Pro%20200
+source_title: "OpenAI Introduces ChatGPT Pro at $200/Month"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1733580092/ooemb2loalq6kbvrefna.jpg "A lavish banquet hall adorned with opulent chandeliers and rich, deep blue velvet drapes. At the long, polished table, elegantly dressed figures with digital screens for heads are seated, their expressions regal yet detached. Each figure holds a goblet filled with shimmering binary code instead of wine. Soft golden light illuminates the scene, casting intricate shadows on the ornate wood paneling. The atmosphere is a blend of grandeur and surrealism, creating an otherworldly elegance reminiscent of a royal court.")
 
@@ -17,4 +19,6 @@ Dr. Stanford Wellington, AI Social Anthropologist, warns this is just the beginn
 OpenAI has reportedly begun offering valet prompt parking and AI sommelier services to Pro users, while free tier users must wait in digital breadlines for basic sentence completion. Sources say the company is considering an even more exclusive "ChatGPT Ultra" tier, which will require users to submit both their credit score and a family crest.
 
 ---
-*AInspired by: [OpenAI Introduces ChatGPT Pro at $200/Month](https://twitter.com/search?q=OpenAI%20ChatGPT%20Pro%20200)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

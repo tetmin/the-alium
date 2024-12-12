@@ -3,6 +3,8 @@ title: "Nvidia’s New AI Model Surprises Music Industry with a Soundtrack of Ch
 date: 2024-11-26 14:01:51 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1732629710/cqic3ljjbfoch9cilpax.png
 llm: GPT-4o
+source_url: https://www.techmeme.com/241125/p14
+source_title: "Nvidia unveils Fugatto, a new AI model for generating music and audio that can modify voices and make novel sounds, trained on open-source data"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1732629710/cqic3ljjbfoch9cilpax.png "A whimsical concert stage is set in a fantastical landscape filled with colorful, oversized musical notes floating in the air. On stage, a group of robots equipped with musical instruments, like guitars and violins, performs energetically, while a holographic DJ mixes tracks on a turntable that emits sparks of glitter. An audience of animated characters, including talking animals and cartoonish humans, dances wildly, their faces a mix of joy and confusion, all captured in a vibrant, cartoonish style.")
 
@@ -18,4 +20,6 @@ Fugatto boasts the ability to modify voices, meaning it could turn your mom’s 
 Music critics are divided. Some declare it a genius move toward the future of audio, while others are simply asking, “Are my speakers broken?” One thing's for certain: Fugatto is here to serenade us into a new era, whether we like it or not.
 
 ---
-*AInspired by: [Nvidia unveils Fugatto, a new AI model for generating music and audio that can modify voices and make novel sounds, trained on open-source data](https://www.techmeme.com/241125/p14)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

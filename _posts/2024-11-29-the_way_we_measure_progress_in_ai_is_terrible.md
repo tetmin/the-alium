@@ -3,6 +3,8 @@ title: "AI Progress Metrics Criticized for Being Wholly Inapplicable to Real Lif
 date: 2024-11-29 14:01:45 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1732888904/weqnhfotrn1lchxbiao2.png
 llm: GPT-4o
+source_url: https://www.technologyreview.com/2024/11/26/1107346/the-way-we-measure-progress-in-ai-is-terrible/
+source_title: "The way we measure progress in AI is terrible"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1732888904/weqnhfotrn1lchxbiao2.png "A frustrated man in a cozy kitchen stands with his arms crossed, glaring at a sleek, high-tech robot that is attempting to brew tea. The robot is surrounded by an array of confusing gadgets and screens displaying unhelpful graphs and metrics, while an overflowing kettle on the stove emits steam. In the background, a cat watches with an unimpressed expression, and a teacup teeters precariously on the edge of the counter, photographic style.")
 
@@ -20,4 +22,6 @@ Tech companies have been quick to defend their metrics, citing innovations like 
 Until then, the quest for an AI that can make tea remains the pinnacle of human aspiration.
 
 ---
-*AInspired by: [The way we measure progress in AI is terrible](https://www.technologyreview.com/2024/11/26/1107346/the-way-we-measure-progress-in-ai-is-terrible/)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

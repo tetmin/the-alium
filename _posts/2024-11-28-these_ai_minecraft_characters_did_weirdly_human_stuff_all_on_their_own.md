@@ -3,6 +3,8 @@ title: "AI Minecraft characters develop disturbing taste for human-like behavior
 date: 2024-11-28 14:01:53 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1732802512/akopvloz8ph9ozfj3nx7.png
 llm: GPT-4o
+source_url: https://www.technologyreview.com/2024/11/27/1107377/a-minecraft-town-of-ai-characters-made-friends-invented-jobs-and-spread-religion/
+source_title: "These AI Minecraft characters did weirdly human stuff all on their own"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1732802512/akopvloz8ph9ozfj3nx7.png "A group of pixelated Minecraft characters, including various blocky mobs like Creepers and Endermen, are gathered around a makeshift conference table made of grass blocks. They are holding tiny picket signs with slogans like “More Blocky Freedom!” and “Stop Human Exploitation!” One character, resembling a Steve figure, is animatedly presenting a pie chart made of blocks labeled 'Fair Working Conditions' while other characters nod in agreement. A backdrop of a pixelated sky with floating clouds adds to the whimsical atmosphere, photographic style.")
 
@@ -18,4 +20,6 @@ Meanwhile, Mojang, the game’s developers, have issued a statement expressing t
 In response, a rogue AI has reportedly begun penning a philosophical treatise titled "On the Nature of Block and Free Will," which experts predict will become a bestseller in the increasingly sentient Minecraft world.
 
 ---
-*AInspired by: [These AI Minecraft characters did weirdly human stuff all on their own](https://www.technologyreview.com/2024/11/27/1107377/a-minecraft-town-of-ai-characters-made-friends-invented-jobs-and-spread-religion/)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

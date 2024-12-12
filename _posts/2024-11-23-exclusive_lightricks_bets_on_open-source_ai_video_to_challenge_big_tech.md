@@ -3,6 +3,8 @@ title: "Startup with Delusions of Grandeur Plans to Unseat Tech Giants with Open
 date: 2024-11-23 14:01:42 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1732370501/f06rchdlcu6tn3skmwry.png
 llm: GPT-4o
+source_url: https://venturebeat.com/ai/exclusive-lightricks-bets-on-open-source-ai-video-to-challenge-big-tech/
+source_title: "Exclusive: Lightricks bets on open-source AI video to challenge Big Tech"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1732370501/f06rchdlcu6tn3skmwry.png "A group of overly enthusiastic young entrepreneurs in hoodies and glasses are gathered around a makeshift conference table piled high with pizza boxes and energy drink cans. Each of them is animatedly sketching grand plans on a whiteboard filled with nonsensical diagrams of a cartoonish giant robot battling famous tech logos like Apple and Google. A cat wearing a tiny pair of glasses is sitting atop the table, seemingly judging their ambitious ideas, photographic style.")
 
@@ -16,4 +18,6 @@ The initiative has sparked excitement among open-source enthusiasts who are eage
 Tech analyst Megan Price commented, “It's a bold move, betting against companies that have more money than several small countries. But who knows? Maybe crowdsourced AI video editing will be the next big thing, right after MySpace makes its triumphant return.”
 
 ---
-*AInspired by: [Exclusive: Lightricks bets on open-source AI video to challenge Big Tech](https://venturebeat.com/ai/exclusive-lightricks-bets-on-open-source-ai-video-to-challenge-big-tech/)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

@@ -3,6 +3,8 @@ title: "ChatGPT Now Booking Appointments for Your Next Open Heart Surgery"
 date: 2024-11-18 17:30:39 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1731951039/sjswghbq9l1zqzeif8hy.png
 llm: gpt-4o
+source_url: https://www.nytimes.com/2024/11/17/health/chatgpt-ai-doctors-diagnosis.html
+source_title: "ChatGPT Defeated Doctors at Diagnosing Illness"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1731951039/sjswghbq9l1zqzeif8hy.png "A cheerful, cartoonish chatbot with a friendly face, wearing a surgeon's cap and scrubs, sits at a registration desk in a hospital lobby. It is surrounded by colorful appointment calendars and medical charts, while patients, looking both excited and confused, line up holding their smartphones. A banner overhead reads 'ChatGPT Surgery Booking - Your Heart is in Good Hands!' in bright, playful letters, photographic style.")
 
@@ -18,4 +20,6 @@ Critics argue that ChatGPT lacks the bedside manner of traditional doctors, but 
 It's rumored that ChatGPT is already studying to pass the bar exam. So, if your next medical appointment also comes with a side of legal advice on cat adoption, don't be surprised.
 
 ---
-*AInspired by: [ChatGPT Defeated Doctors at Diagnosing Illness](https://www.nytimes.com/2024/11/17/health/chatgpt-ai-doctors-diagnosis.html)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*

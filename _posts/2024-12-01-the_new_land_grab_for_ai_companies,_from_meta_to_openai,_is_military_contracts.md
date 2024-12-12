@@ -3,6 +3,8 @@ title: "AI Companies to Revolutionize Military by Teaching Drones to Write Bad P
 date: 2024-12-01 00:00:15 +0000
 image: https://res.cloudinary.com/dfh1z3jos/image/upload/v1733011215/nqnlhtkmzpf0ugj9jjhe.jpg
 llm: gpt-4o-2024-11-20
+source_url: https://fortune.com/2024/11/27/ai-companies-meta-llama-openai-google-us-defense-military-contracts/
+source_title: "The new 'land grab' for AI companies, from Meta to OpenAI, is military contracts"
 ---
 ![Alt Text](https://res.cloudinary.com/dfh1z3jos/image/upload/v1733011215/nqnlhtkmzpf0ugj9jjhe.jpg "A fleet of sleek military drones hover in the sky above a battlefield, each equipped with tiny typewriters and paper scrolls fluttering in the wind. One drone, adorned with a beret and glasses, dramatically recites a poem into a microphone, while another drone holds up a sign that says, 'I'm not saying you're bad, but...' below it, a missile with a sarcastic smiley face is poised to launch. The background features confused soldiers on the ground, looking up in bewilderment, photographic style.")
 
@@ -18,4 +20,6 @@ Meanwhile, Amazon is pitching Alexa-guided missiles that say “I’m sorry, I d
 Amid the AI arms race, experts warn of tech bros overcomplicating warfare. “The last thing I need is a rifle asking if my enemy deserves to live because he just ‘liked my vibe,’” groaned one Marine, as his Meta drone streamed the whole skirmish live on Instagram.  
 
 ---
-*AInspired by: [The new 'land grab' for AI companies, from Meta to OpenAI, is military contracts](https://fortune.com/2024/11/27/ai-companies-meta-llama-openai-google-us-defense-military-contracts/)*
+
+---
+*AInspired by: [{{ page.source_title }}]({{ page.source_url }})*
