@@ -60,5 +60,23 @@ Hayes said: “I was confident from the start because that computer just didn’
 However the Google spokesman added: “We should have added a ‘piss port’ to allow DeepMind to expel fluids. Also I think a little slot that you tip pork scratchings into would help.”
 </article>
 </example>
+<example>
+<article_headline>
+Trump Supports Longshoremen Against Port Automation
+</article_headline>
+<article>
+Former President Donald Trump has unveiled his solution to port automation: a controversial breeding program to create dock workers with increasingly longer arms who can reach cargo ships from shore.
+
+"We have the best genes, tremendous genes. Why use robots when we can evolve workers with arms so long - probably the longest arms ever - that they can just reach out and grab containers right off the boats?" Trump announced at a campaign rally.
+
+The proposal includes a national database of workers ranked by arm length and a mandate that only the longest-armed individuals be allowed to reproduce, creating what Trump calls "a beautiful arms race against the machines."
+
+Dr. Stretch Armstrong, director of the Institute of Human Elongation, expressed concerns: "While Mr. Trump's evolutionary approach is creative, we estimate it would take roughly 40,000 years to develop arms long enough to reach container ships."
+
+Bob Extender, president of the Long-Limbed Workers Union, added: "We're reaching for solutions here, but this might be stretching the truth about human capabilities."
+
+Trump dismissed critics, claiming he had already successfully bred "the longest-armed people you've ever seen" at Mar-a-Lago in the 1980s.
+</article>
+</example>
 
 Now, please proceed with your satire development and then write your satirical article of no more than 200 words in the style of The Daily Mash and The Onion based on the provided headline and your development process. Remember to open & close your article with <article></article> tags.
