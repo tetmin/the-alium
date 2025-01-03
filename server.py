@@ -117,7 +117,7 @@ class Article(BaseModel):
         )
 
     @staticmethod
-    def get_embeddings(texts, model="text-embedding-ada-002"):
+    def get_embeddings(texts, model="text-embedding-3-small"):
         """Utility function to batch embed input texts for similarity comparisons"""
         response = litellm.embedding(model=model, input=texts)
         return [item["embedding"] for item in response.data]
@@ -357,6 +357,7 @@ class JekyllPublisher:
             "Authorization": f"token {self.token}",
             "Accept": "application/vnd.github.v3+json",
         }
+        self.api_url = "https://www.thealium.com/api/posts/"
 
     def publish(self, story: Story):
         story.blog_url = self._create_filename(story)
@@ -377,7 +378,27 @@ class JekyllPublisher:
         )
         return response
 
-    def get_recent_article_titles(self, months_ago=3):
+    def _get_api_posts(self, months_ago=3) -> list[dict]:
+        """Helper function to fetch and filter posts from the API"""
+        try:
+            response = requests.get(self.api_url, timeout=10)
+            if response.status_code != 200:
+                return []
+            
+            cutoff_date = datetime.now() - timedelta(days=months_ago * 30)
+            posts = response.json()
+            
+            # Filter posts by date and return
+            return [
+                post for post in posts 
+                if datetime.strptime(post["date"].split()[0], "%Y-%m-%d") >= cutoff_date
+            ]
+        except Exception as e:
+            print(f"API fetch error: {e}")
+            return []
+
+    def _get_github_titles(self, months_ago=3) -> list[str]:
+        """Legacy method to get titles from GitHub"""
         response = requests.get(f"{self.base_url}/_posts", timeout=10)
         if response.status_code != 200:
             return []
@@ -387,7 +408,6 @@ class JekyllPublisher:
 
         for file in json.loads(response.text):
             try:
-                # Extract date and title using regex for robustness
                 match = re.match(r"(\d{4}-\d{2}-\d{2})-(.+?)\.(md|markdown)$", file["name"], re.IGNORECASE)
                 if match:
                     date_str = match.group(1)
@@ -401,6 +421,16 @@ class JekyllPublisher:
                 continue
 
         return filtered_titles
+
+    def get_recent_article_titles(self, months_ago=3):
+        """Get recent article titles, preferring API source but falling back to GitHub if needed"""
+        posts = self._get_api_posts(months_ago)
+        if posts:
+            return [post["source_title"] for post in posts if post.get("source_title")]
+        
+        # Fallback to GitHub if API fails
+        print("Falling back to GitHub for recent titles")
+        return self._get_github_titles(months_ago)
 
     def _get_date_for_filename(self):
         now = datetime.now(pytz.utc).astimezone(pytz.timezone("Europe/London"))
@@ -871,7 +901,7 @@ def _generate_and_publish_stories(test_mode: bool = False):
         else random.choice(["claude-3-5-sonnet-20241022", "xai/grok-2-1212"])
     )  # Some options: "xai/grok-2-1206", "claude-3-5-sonnet-20241022", "gpt-4o-2024-11-20"
     image_quality = "standard" if test_mode else "hd"
-    similarity_threshold = 0.95 if test_mode else 0.9  # Higher threshold in test mode
+    similarity_threshold = 0.95 if test_mode else 0.70  # Higher threshold in test mode
     litellm.set_verbose = True if test_mode else False  # For debugging
     metadata = {
         "environment": "development" if test_mode else "production",
