@@ -35,7 +35,9 @@ image = (
     modal.Image.debian_slim()
     .pip_install("uv")
     .workdir("/app")
-    .copy_local_file("pyproject.toml", "pyproject.toml")
+    .add_local_file("pyproject.toml", "pyproject.toml")
+    .add_local_dir("prompts", "/app/prompts")
+    .add_local_dir(".cache", "/app/.cache")
     .run_commands("uv pip install --system --compile-bytecode .")
     .run_commands("playwright install --with-deps chromium")
 )
@@ -43,11 +45,6 @@ app = modal.App(
     name="the-alium",
     image=image,
     secrets=[modal.Secret.from_name("alium-secrets")],
-    mounts=[
-        modal.Mount.from_local_dir("prompts", remote_path="/app/prompts"),
-        modal.Mount.from_local_dir(".cache", remote_path="/app/.cache"),
-        modal.Mount.from_local_file("pyproject.toml", remote_path="/app/pyproject.toml"),
-    ],
 )
 
 # Global config
