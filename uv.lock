@@ -361,7 +361,7 @@ name = "exceptiongroup"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749, upload-time = "2025-05-10T17:42:51.123Z" }
 wheels = [
@@ -988,7 +988,7 @@ wheels = [
 
 [[package]]
 name = "modal"
-version = "0.77.0"
+version = "1.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -1006,9 +1006,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "watchfiles" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/32/06/acd53f8fb8d4f0f7a1d5a5bfdb962fcbbe917ed6f703d2a6dfdbfb490c34/modal-0.77.0.tar.gz", hash = "sha256:0a3c2b438a5d26c4b2a1100a7cecdd47e09f715e2a6e0de2a50aad235ddc92c3", size = 508716, upload-time = "2025-05-13T22:02:01.514Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/88/54/8d5d6090383698bd6c0d9612a1958c7b628260317063339a74f73a943e60/modal-1.0.2.tar.gz", hash = "sha256:f79cc1c75b378f1c92365a0a05741ac719af3d5900b67947c159c11df17d4ccc", size = 506313, upload-time = "2025-05-26T21:30:25.285Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/db/a2/06b274bbec3501de530e8be5da02e62258f568201200bcb115976ae3b68e/modal-0.77.0-py3-none-any.whl", hash = "sha256:f646d47e9950b929a03918124c4b12663fdc146287af3c0bd96de3ce23776399", size = 576782, upload-time = "2025-05-13T22:01:58.734Z" },
+    { url = "https://files.pythonhosted.org/packages/87/0b/5d6a775ec1901381b5a81e0c88db10efebd74f010bcae3613b418a46ae9c/modal-1.0.2-py3-none-any.whl", hash = "sha256:639bc4a0afa633f7a14355f730426c52627452b102af23358dcee36233abe958", size = 574253, upload-time = "2025-05-26T21:30:21.653Z" },
 ]
 
 [[package]]
@@ -2137,7 +2137,7 @@ wheels = [
 
 [[package]]
 name = "the-alium"
-version = "0.1.0"
+version = "0.1.1"
 source = { virtual = "." }
 dependencies = [
     { name = "cloudinary" },
@@ -2167,7 +2167,7 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1.4,<4.0.0" },
     { name = "litellm", specifier = ">=1.53.1,<2.0.0" },
     { name = "markdown", specifier = ">=3.7,<4.0" },
-    { name = "modal", specifier = ">=0.65.48,<1.0.0" },
+    { name = "modal", specifier = ">=1.0.0,<2.0.0" },
     { name = "numpy", specifier = ">=1.24.3,<2.0.0" },
     { name = "pytest-playwright", specifier = ">=0.6.2,<1.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0,<2.0.0" },
