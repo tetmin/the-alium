@@ -35,11 +35,11 @@ image = (
     modal.Image.debian_slim()
     .pip_install("uv")
     .workdir("/app")
-    .add_local_file("pyproject.toml", "pyproject.toml")
-    .add_local_dir("prompts", "/app/prompts")
-    .add_local_dir(".cache", "/app/.cache")
+    .add_local_file("pyproject.toml", "/app/pyproject.toml", copy=True)
     .run_commands("uv pip install --system --compile-bytecode .")
     .run_commands("playwright install --with-deps chromium")
+    .add_local_dir("prompts", "/app/prompts")
+    .add_local_dir(".cache", "/app/.cache")
 )
 app = modal.App(
     name="the-alium",
