@@ -8,7 +8,8 @@ import subprocess
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Union
+from typing import Union, Any
+import asyncio
 
 import cloudinary.uploader
 import dotenv
@@ -254,9 +255,22 @@ class AssetManager:
         # Initialize only happens once due to singleton pattern
         pass
 
-    def upload(self, data: Union[str, bytes], permanent: bool = False) -> str:
+    def upload(self, data: Union[str, bytes, Any], permanent: bool = False) -> str:
         """Upload data to storage. Handles both URLs and raw data."""
-        upload_data = data if isinstance(data, bytes) else requests.get(data, timeout=10).content
+        if isinstance(data, bytes):
+            upload_data = data
+        elif isinstance(data, str):
+            # Use session for better connection management
+            with requests.Session() as session:
+                upload_data = session.get(data, timeout=10).content
+        else:
+            if hasattr(data, 'image') and hasattr(data.image, 'image_bytes'):
+                upload_data = data.image.image_bytes
+            elif hasattr(data, 'image_bytes'):
+                upload_data = data.image_bytes
+            else:
+                raise TypeError(f"Unsupported data type for upload: {type(data)}")
+        
         result = cloudinary.uploader.upload(upload_data)
 
         if not permanent:
@@ -382,9 +396,10 @@ class JekyllPublisher:
     def _get_api_posts(self, months_ago=3) -> list[dict]:
         """Helper function to fetch and filter posts from the API"""
         try:
-            response = requests.get(self.api_url, timeout=10)
-            if response.status_code != 200:
-                return []
+            with requests.Session() as session:
+                response = session.get(self.api_url, timeout=10)
+                if response.status_code != 200:
+                    return []
             
             cutoff_date = datetime.now() - timedelta(days=months_ago * 30)
             posts = response.json()
@@ -400,9 +415,10 @@ class JekyllPublisher:
 
     def _get_github_titles(self, months_ago=3) -> list[str]:
         """Legacy method to get titles from GitHub"""
-        response = requests.get(f"{self.base_url}/_posts", timeout=10)
-        if response.status_code != 200:
-            return []
+        with requests.Session() as session:
+            response = session.get(f"{self.base_url}/_posts", timeout=10)
+            if response.status_code != 200:
+                return []
 
         cutoff_date = datetime.now() - timedelta(days=months_ago * 30)
         filtered_titles = []
@@ -475,10 +491,11 @@ class TwitterPublisher:
 
     def upload_media(self, image_url=None, image_base64=None):
         if image_url:
-            response = requests.get(image_url, timeout=10)
-            file = io.BytesIO(response.content)
-            response = self.api.media_upload(filename="story.jpg", file=file)
-            return response.media_id_string
+            with requests.Session() as session:
+                response = session.get(image_url, timeout=10)
+                file = io.BytesIO(response.content)
+                response = self.api.media_upload(filename="story.jpg", file=file)
+                return response.media_id_string
         elif image_base64:
             file = io.BytesIO(base64.b64decode(image_base64))
             response = self.api.media_upload(filename="story.jpg", file=file)
@@ -840,7 +857,8 @@ class StoryEditor:
                     aspect_ratio="4:3",
                 ),
             )
-            return response.generated_images[0]
+            generated_image = response.generated_images[0]
+            return generated_image.image.image_bytes
         
         def try_dalle():
             response = litellm.image_generation(
@@ -932,12 +950,15 @@ class StoryEditor:
 
 
 # Main function to generate and publish satirical stories
-def _generate_and_publish_stories(test_mode: bool = False):
+def _generate_and_publish_stories(test_mode: bool = False):    
     # Set up logging & cheaper test mode models
     print("Running in test mode" if test_mode else "Running in production mode")
     image_quality = "standard" if test_mode else "hd"
     similarity_threshold = 0.95 if test_mode else 0.70  # Higher threshold in test mode
-    litellm.set_verbose = True if test_mode else False  # For debugging
+    os.environ['LITELLM_LOG'] = 'DEBUG' if test_mode else 'INFO'
+    
+
+    
     metadata = {
         "environment": "development" if test_mode else "production",
         "session_id": os.environ["MODAL_TASK_ID"] if not modal.is_local() else uuid.uuid4(),
