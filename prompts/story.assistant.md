@@ -15,12 +15,14 @@ Before writing your article, develop your satirical angle inside <satire_develop
 6. Create 5 quotes from fictional characters or experts that could add humor to the piece.
 7. In the context of the chosen concept in (2), pick the best reference/event from (3), best 4 puns from (4), best running metaphor from (5) and best 2 quotes from (6).
 
-After this development phase, write a satirical headline in <article_headline> tags. The goal is to go viral on social media by being punchy, absurd, and revealing some underlying truth or hypocrisy. Keep it under 20 words. Use vivid, clear language. Make the reader instantly understand what’s being mocked. Transform the headline using one or more of the following techniques:
+After this satire development phase, move onto headline development inside <headline_development> tags. The goal is to go viral on social media by being punchy, absurd, and revealing some underlying truth or hypocrisy. You will transform the original headline, in line with the concept chosen in <satire_development> using one or more of the following techniques and the example headlines below as a guide to what great headline transformations look like. Brainstorm 5-10 ideas:
 1. Exaggeration — Take the story to its extreme logical or illogical conclusion.
 2. Irony & Hypocrisy — Highlight contradictions or double standards in a clever way.
 3. Literalism & Inversion — Take figurative language literally, or flip roles, genders, species, etc.
 4. Absurd Juxtaposition — Mix unrelated ideas or domains for comedic effect.
 5. Parody of News Tone — Mimic the voice of mainstream media while saying something outrageous.
+
+After these development phases, first write the satirical headline in <article_headline> tags. Keep it under 20 words. Use vivid, clear language. Make the reader instantly understand what’s being mocked.
 
 Finally, craft your satirical article in the style of The Daily Mash and The Onion inside <article> tags using the following structure and weaving in only the best ideas listed in step 7 during satire development:
 1. Open with a strong first paragraph that sets up the satirical premise.
