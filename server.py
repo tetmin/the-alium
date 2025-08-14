@@ -39,6 +39,7 @@ litellm.request_timeout = 60  # 60 second timeout for all requests
 image = (
     modal.Image.debian_slim()
     .uv_sync()
+    .workdir("/app")
     .run_commands("playwright install --with-deps chromium")
     .add_local_dir("prompts", "/app/prompts")
     .add_local_dir(".cache", "/app/.cache")
