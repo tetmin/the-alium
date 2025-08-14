@@ -38,10 +38,7 @@ litellm.request_timeout = 60  # 60 second timeout for all requests
 # Initialize Modal Labs app for serverless deployment
 image = (
     modal.Image.debian_slim()
-    .pip_install("uv")
-    .workdir("/app")
-    .add_local_file("pyproject.toml", "/app/pyproject.toml", copy=True)
-    .run_commands("uv pip install --system --compile-bytecode .")
+    .uv_sync()
     .run_commands("playwright install --with-deps chromium")
     .add_local_dir("prompts", "/app/prompts")
     .add_local_dir(".cache", "/app/.cache")

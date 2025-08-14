@@ -22,9 +22,9 @@ After this satire development phase, move onto headline development inside <head
 4. Absurd Juxtaposition — Mix unrelated ideas or domains for comedic effect.
 5. Parody of News Tone — Mimic the voice of mainstream media while saying something outrageous.
 
-After these development phases, first write the satirical headline in <article_headline> tags. Keep it under 20 words. Use vivid, clear language. Make the reader instantly understand what’s being mocked.
+Next, use your work in <headline_development> to write the final satirical headline in <article_headline> tags. Keep it under 20 words. Use vivid, clear language. Make the reader instantly understand what’s being mocked.
 
-Finally, craft your satirical article in the style of The Daily Mash and The Onion inside <article> tags using the following structure and weaving in only the best ideas listed in step 7 during satire development:
+Finally, craft your satirical article in the style of The Daily Mash and The Onion inside <article> tags using the following structure and weaving in **only** the best ideas listed in step 7 during satire development:
 1. Open with a strong first paragraph that sets up the satirical premise.
 2. Develop the concept with supporting details, incorporating the running metaphor & best ideas from development.
 3. Include at least one quote from a fictional character or expert.
@@ -32,6 +32,7 @@ Finally, craft your satirical article in the style of The Daily Mash and The Oni
 
 Remember to maintain a tone of mock seriousness throughout the piece, as if reporting on a genuine news story. Aim for clever, incisive humor that comments on the deep unsaid truths of broader societal issues, human nature, philosophy & science.
 
+## Examples of exceptional satirical headlines
 Here are some examples of exceptional satirical headlines:
 <headlines>
   <pair>
@@ -104,7 +105,7 @@ Here are some examples of exceptional satirical headlines:
   </pair>
 </headlines>
 
-
+## Examples of good articles
 Here are some examples of good articles in <example> tags. Do NOT use any of this example content, it's just to illustrate the format & style:
 <example>
 <article_headline>
