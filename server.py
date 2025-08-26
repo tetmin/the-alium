@@ -3,13 +3,13 @@ import functools
 import io
 import json
 import os
-import random
 import re
 import subprocess
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Union
+from typing import Union, Any
+import asyncio
 
 import cloudinary.uploader
 import dotenv
@@ -26,28 +26,28 @@ from playwright.sync_api import sync_playwright
 from pydantic import BaseModel, HttpUrl
 from sklearn.metrics.pairwise import cosine_similarity
 from together import Together
+from google import genai
 
 dotenv.load_dotenv()
+
+# Global LiteLLM configuration for reliability across ALL models/calls
 litellm.success_callback = ["athina"]  # For monitoring
+litellm.num_retries = 2  # Retry up to 3 times for all LiteLLM calls
+litellm.request_timeout = 60  # 60 second timeout for all requests
 
 # Initialize Modal Labs app for serverless deployment
 image = (
     modal.Image.debian_slim()
-    .pip_install("uv")
+    .uv_sync()
     .workdir("/app")
-    .copy_local_file("pyproject.toml", "pyproject.toml")
-    .run_commands("uv pip install --system --compile-bytecode .")
     .run_commands("playwright install --with-deps chromium")
+    .add_local_dir("prompts", "/app/prompts")
+    .add_local_dir(".cache", "/app/.cache")
 )
 app = modal.App(
     name="the-alium",
     image=image,
     secrets=[modal.Secret.from_name("alium-secrets")],
-    mounts=[
-        modal.Mount.from_local_dir("prompts", remote_path="/app/prompts"),
-        modal.Mount.from_local_dir(".cache", remote_path="/app/.cache"),
-        modal.Mount.from_local_file("pyproject.toml", remote_path="/app/pyproject.toml"),
-    ],
 )
 
 # Global config
@@ -253,9 +253,22 @@ class AssetManager:
         # Initialize only happens once due to singleton pattern
         pass
 
-    def upload(self, data: Union[str, bytes], permanent: bool = False) -> str:
+    def upload(self, data: Union[str, bytes, Any], permanent: bool = False) -> str:
         """Upload data to storage. Handles both URLs and raw data."""
-        upload_data = data if isinstance(data, bytes) else requests.get(data, timeout=10).content
+        if isinstance(data, bytes):
+            upload_data = data
+        elif isinstance(data, str):
+            # Use session for better connection management
+            with requests.Session() as session:
+                upload_data = session.get(data, timeout=10).content
+        else:
+            if hasattr(data, 'image') and hasattr(data.image, 'image_bytes'):
+                upload_data = data.image.image_bytes
+            elif hasattr(data, 'image_bytes'):
+                upload_data = data.image_bytes
+            else:
+                raise TypeError(f"Unsupported data type for upload: {type(data)}")
+        
         result = cloudinary.uploader.upload(upload_data)
 
         if not permanent:
@@ -381,9 +394,10 @@ class JekyllPublisher:
     def _get_api_posts(self, months_ago=3) -> list[dict]:
         """Helper function to fetch and filter posts from the API"""
         try:
-            response = requests.get(self.api_url, timeout=10)
-            if response.status_code != 200:
-                return []
+            with requests.Session() as session:
+                response = session.get(self.api_url, timeout=10)
+                if response.status_code != 200:
+                    return []
             
             cutoff_date = datetime.now() - timedelta(days=months_ago * 30)
             posts = response.json()
@@ -399,9 +413,10 @@ class JekyllPublisher:
 
     def _get_github_titles(self, months_ago=3) -> list[str]:
         """Legacy method to get titles from GitHub"""
-        response = requests.get(f"{self.base_url}/_posts", timeout=10)
-        if response.status_code != 200:
-            return []
+        with requests.Session() as session:
+            response = session.get(f"{self.base_url}/_posts", timeout=10)
+            if response.status_code != 200:
+                return []
 
         cutoff_date = datetime.now() - timedelta(days=months_ago * 30)
         filtered_titles = []
@@ -474,10 +489,11 @@ class TwitterPublisher:
 
     def upload_media(self, image_url=None, image_base64=None):
         if image_url:
-            response = requests.get(image_url, timeout=10)
-            file = io.BytesIO(response.content)
-            response = self.api.media_upload(filename="story.jpg", file=file)
-            return response.media_id_string
+            with requests.Session() as session:
+                response = session.get(image_url, timeout=10)
+                file = io.BytesIO(response.content)
+                response = self.api.media_upload(filename="story.jpg", file=file)
+                return response.media_id_string
         elif image_base64:
             file = io.BytesIO(base64.b64decode(image_base64))
             response = self.api.media_upload(filename="story.jpg", file=file)
@@ -785,7 +801,7 @@ class StoryEditor:
         self.test_mode = test_mode
 
     def generate_story(
-        self, article: Article, model="gpt-4o-mini", image_quality="standard", metadata=None, editor=False
+        self, article: Article, image_quality="standard", metadata=None, editor=False
     ) -> Story | None:
         # Remove article title moderation check since it's now done in NewsSource
         STORY_PROMPT = self.load_prompt(
@@ -797,10 +813,12 @@ class StoryEditor:
             {"role": "user", "content": STORY_PROMPT},
             {"role": "assistant", "content": "<satire_development>"},  # assistant prefill
         ]
-        response = litellm.completion(model=model, messages=messages, temperature=0.8, metadata=metadata)
+        model = "claude-3-5-sonnet-latest" if not self.test_mode else "claude-3-5-haiku-latest"
+        response = litellm.completion(model=model, messages=messages, temperature=0.8, metadata=metadata, fallbacks=["gpt-4o", "xai/grok-3-latest"])
+        
         title = self.extract_between_tags("article_headline", response.choices[0].message.content, strip=True)[0]
         content = self.extract_between_tags("article", response.choices[0].message.content, strip=True)[0]
-        story = Story(original_article=article, title=title, content=content, llm=model)
+        story = Story(original_article=article, title=title, content=content, llm=response.model)
 
         if editor:
             # Reflect & edit the story
@@ -812,21 +830,46 @@ class StoryEditor:
             response = litellm.completion(model=model, messages=messages, temperature=0.5, metadata=metadata)
             title = self.extract_between_tags("article_headline", response.choices[0].message.content, strip=True)[0]
             content = self.extract_between_tags("article", response.choices[0].message.content, strip=True)[0]
-            story = Story(original_article=article, title=title, content=content, llm=model)
+            story = Story(original_article=article, title=title, content=content, llm=response.model)
 
         # Write the image prompt & check for moderation issues
         IMAGE_PROMPT = self.load_prompt("image", news_headline=title)
         messages = [{"role": "user", "content": IMAGE_PROMPT}]
-        response = litellm.completion(model="gpt-4o-mini", messages=messages, temperature=0.7, metadata=metadata)
+        response = litellm.completion(model="gpt-4o-mini", messages=messages, temperature=0.7, metadata=metadata, fallbacks=["claude-3-5-haiku-latest", "xai/grok-3-mini-latest"])
         image_prompt = self.extract_between_tags("image_prompt", response.choices[0].message.content, strip=True)[0]
         if self._get_moderation_flag(image_prompt, metadata):
             print(f"Image prompt failed moderation: {image_prompt}")
             return None
         story.image_prompt = image_prompt
 
-        # Generate the image
-        image_provider = "together"  # Temporary since it's free for a while
-        if image_provider == "together":
+        # Generate the image using fallback providers
+        def try_imagen():
+            google_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+            response = google_client.models.generate_images(
+                model="models/imagen-3.0-generate-002",
+                prompt=image_prompt,
+                config=dict(
+                    number_of_images=1,
+                    output_mime_type="image/jpeg",
+                    person_generation="ALLOW_ADULT",
+                    aspect_ratio="4:3",
+                ),
+            )
+            generated_image = response.generated_images[0]
+            return generated_image.image.image_bytes
+        
+        def try_dalle():
+            response = litellm.image_generation(
+                prompt=image_prompt,
+                model="dall-e-3",
+                n=1,
+                size="1024x1024",
+                quality=image_quality,
+                metadata=metadata,
+            )
+            return response.data[0].url
+        
+        def try_flux():
             together_client = Together(api_key=os.environ["TOGETHER_API_KEY"])
             response = together_client.images.generate(
                 prompt=image_prompt,
@@ -837,17 +880,26 @@ class StoryEditor:
                 n=1,
                 response_format="b64_json",
             )
-            image = base64.b64decode(response.data[0].b64_json)
-        else:
-            response = litellm.image_generation(
-                prompt=image_prompt,
-                model="dall-e-3",
-                n=1,
-                size="1024x1024",
-                quality=image_quality,
-                metadata=metadata,
-            )
-            image = response.data[0].url
+            return base64.b64decode(response.data[0].b64_json)
+        
+        providers = [
+            ("Google Imagen", try_imagen),
+            ("FLUX", try_flux),
+            ("DALL-E 3", try_dalle),
+        ]
+        
+        image = None
+        for name, provider in providers:
+            try:
+                image = provider()
+                print(f"Successfully generated image using {name}")
+                break
+            except Exception as e:
+                print(f"{name} generation failed: {e}")
+        
+        if image is None:
+            print("All image generation providers failed")
+            return None
         
         # Has to be permanent as used in Jekyll blog
         story.image_url = self.asset_manager.upload(image, permanent=not self.test_mode)
@@ -887,22 +939,24 @@ class StoryEditor:
 
     @staticmethod
     def _get_moderation_flag(prompt, metadata=None):
-        response = litellm.moderation(input=prompt, model="omni-moderation-latest", metadata=metadata)
-        return response.results[0].flagged
+        try:
+            response = litellm.moderation(input=prompt, model="omni-moderation-latest", metadata=metadata)
+            return response.results[0].flagged
+        except Exception as e:
+            print(f"Moderation check failed: {e}, assuming content is safe")
+            return False  # Assume safe if moderation fails as OpenAI is the only moderation provider
 
 
 # Main function to generate and publish satirical stories
-def _generate_and_publish_stories(test_mode: bool = False):
+def _generate_and_publish_stories(test_mode: bool = False):    
     # Set up logging & cheaper test mode models
     print("Running in test mode" if test_mode else "Running in production mode")
-    model = (
-        "claude-3-5-haiku-20241022"
-        if test_mode
-        else random.choice(["claude-3-5-sonnet-20241022"])
-    )  # Some options: "xai/grok-2-1206", "claude-3-5-sonnet-20241022", "gpt-4o-2024-11-20"
     image_quality = "standard" if test_mode else "hd"
     similarity_threshold = 0.95 if test_mode else 0.70  # Higher threshold in test mode
-    litellm.set_verbose = True if test_mode else False  # For debugging
+    os.environ['LITELLM_LOG'] = 'DEBUG' if test_mode else 'INFO'
+    
+
+    
     metadata = {
         "environment": "development" if test_mode else "production",
         "session_id": os.environ["MODAL_TASK_ID"] if not modal.is_local() else uuid.uuid4(),
@@ -929,8 +983,8 @@ def _generate_and_publish_stories(test_mode: bool = False):
     # Edit each article into a satirical story
     for i, article in enumerate(articles, 1):
         print(f"Generating satirical story {i} of {len(articles)} on {article.title}...")
-        editor = StoryEditor()
-        story = editor.generate_story(article, model, image_quality, metadata, editor=False)
+        editor = StoryEditor(test_mode=test_mode)
+        story = editor.generate_story(article, image_quality, metadata, editor=False)
         print(story)
 
         # Publish if not in test mode and story generation succeeded
