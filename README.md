@@ -8,7 +8,7 @@ The flow is roughly:
 
 ## TODO
 - [x] ~~Find a better news source than [GNews API](https://gnews.io/)~~
-- [x] ~~Improve image generation (article title -> image prompt is not very good & gets cencored sometimes)~~
+- [x] ~~Improve image generation (article title -> image prompt is not very good & gets censored sometimes)~~
 - [x] ~~Refactor codebase to extend source, editor, publisher~~
 - [x] ~~Publisher: Virtual screenshot of story for posting to Twitter as an image~~
 - [x] ~~Editor: Define an image style, improve image consistency & humour~~
@@ -39,7 +39,7 @@ bundle exec jekyll server
 ### To create your own site
 - Clone repo
 - Modify _config.yml
-- Setup Github Pages
+- Setup GitHub Pages
 - Install [Modal Labs](https://modal.com/docs/guide)
 - Add your own secrets to Modal
 - Deploy Modal server manually or setup ci-cd as per .github/workflows/ci-cd.yml

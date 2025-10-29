@@ -67,7 +67,7 @@ Here is the satirical news headline you'll be working with:
 
 Please follow these guidelines to create your image prompt:
 
-1.. Choose a single, strong core concept that best represents the headline's satire.
+1. Choose a single, strong core concept that best represents the headline's satire.
 2. Develop detailed visual elements that bring this concept to life, including:
    - Specific objects and their positioning
    - Colors and lighting
@@ -75,6 +75,8 @@ Please follow these guidelines to create your image prompt:
 3. Ensure your description is physically plausible and photographic in nature.
 4. Avoid including any real words or text in the image description.
 5. Keep the description focused and avoid overcrowding with too many details.
+6. Design the image to be eye-catching, amusing, and click-worthy as a thumbnail for a social media post.
+7. Ensure the image goes well with the news headline.
 
 In your final output, provide a concise paragraph (3-5 sentences) describing the image within <image_prompt> tags. Focus on visual details and avoid explaining the metaphor or satire explicitly. Use examples in <examples> as a guide to creating a great output.
 
